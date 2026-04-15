@@ -1,0 +1,388 @@
+---
+title: "CPTAC HNSCC Data Integration"
+output: html_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r}
+# Data Manipulation
+library(tidyverse)
+library(data.table)
+library(janitor)
+library(here)
+
+# Bioconductor / Genomics
+library(SummarizedExperiment)
+library(TCGAbiolinks)
+library(Biobase)
+library(S4Vectors)
+library(matrixStats)
+library(org.Hs.eg.db)
+library(AnnotationDbi)
+```
+
+# Download CPTAC Pre-processed Data (LinkedOmics Freeze)
+
+```{r}
+# Define directories
+DATA_DIR <- here("CPTAC", "data")
+HNSC_DIR <- file.path(DATA_DIR, "HNSCC")
+
+if (!dir.exists(DATA_DIR)) dir.create(DATA_DIR, recursive = TRUE)
+
+# Download and Unzip
+if (!dir.exists(HNSC_DIR)) {
+  message("Downloading CPTAC HNSCC Data Freeze...")
+  # FIX: Removed markdown syntax from the URL string
+  zip_url <- "https://cptac-pancancer-data.s3.us-west-2.amazonaws.com/data_freeze_v1.2_reorganized/zip_files/HNSCC.zip"
+  zip_file <- file.path(DATA_DIR, "HNSCC.zip")
+  
+  download.file(zip_url, destfile = zip_file)
+  unzip(zip_file, exdir = DATA_DIR)
+  file.remove(zip_file)
+} else {
+  message("CPTAC HNSCC Data directory already exists.")
+}
+```
+
+# Load protein coding genes filter 
+
+```{r}
+# 1. Load and Prepare the Reference "Universe"
+hnsc_aging_dir <- "/restricted/projectnb/agedisease/projects/oralcancer/aging/pnarnur"
+autosomal_protein_genes <- readRDS(file.path(hnsc_aging_dir, "data", "raw_data", "data_summaries", "version_115_ensembl_protein_coding_autosomal_genes.RDS"))
+
+# Ensure the reference itself is unique by Symbol to prevent exploding joins
+# We prioritize the first Ensembl ID per symbol if duplicates exist in the reference
+protein_genes <- autosomal_protein_genes %>%
+  dplyr::filter(hgnc_symbol != "") %>%
+  dplyr::select(ensembl_gene_id, hgnc_symbol) %>%
+  dplyr::distinct(hgnc_symbol, .keep_all = TRUE)
+```
+
+# Create and save RNA-seq summarizedexperiment from ESet
+
+## Combining survival and other patient metadata 
+
+Read this, this is cool [How to Combine Two Data Frames in R with Different Columns Using Base R, dplyr, and data.table](https://www.spsanderson.com/steveondata/posts/2024-10-10/)
+
+
+```{r}
+# Load Raw Metadata Files
+pheno <- fread(file.path(HNSC_DIR, "HNSCC_phenotype.txt"), data.table = FALSE)
+surv  <- fread(file.path(HNSC_DIR, "HNSCC_survival.txt"),  data.table = FALSE)
+meta  <- fread(file.path(HNSC_DIR, "HNSCC_meta.txt"),      data.table = FALSE)
+meta  <- meta[-1, ] # Remove type description row
+
+# Merge Clinical Data
+pheno_surv <- dplyr::full_join(pheno, surv, by = c("idx" = "case_id"))
+pheno_surv_meta <- dplyr::full_join(pheno_surv, meta, by = c("idx" = "case_id"))
+
+# Load ExpressionSet specifically to get the 'pData' (Subject IDs)
+eset_raw <- readRDS(file.path(DATA_DIR, "HNSC_RNAseq_eset.rds"))
+pdata_raw <- pData(eset_raw) 
+
+# Create MASTER Metadata linked to SubjectIDs
+# We coalesce survival columns here once for the whole project
+master_metadata <- pdata_raw %>% 
+  dplyr::left_join(pheno_surv_meta, by = c("subjectID" = "idx"), suffix=c("",".y")) %>%
+  dplyr::select(-ends_with(".y")) %>%
+  dplyr::filter(HPV_inference == "NO") %>% # HPV-negative filter
+  dplyr::mutate(OS_days = coalesce(OS_days, overall_survival), 
+                OS_event = coalesce(OS_event, overall_free_status)) %>% 
+  dplyr::filter(!is.na(OS_days)) %>% 
+  dplyr::filter(!is.na(OS_event))
+```
+
+## Create SummarizedExperiment RNAseq
+
+Filtering to protein coding, autosomal genes only 
+
+```{r}
+# 1. Filter Expression Data
+eset <- eset_raw
+
+# Filter Columns (Samples)
+# Keep only Tumors AND samples present in our cleaned master metadata
+keep_samples <- (eset$sample_type == 'tumor') & 
+                (eset$subjectID %in% master_metadata$subjectID)
+eset <- eset[, keep_samples]
+
+# Filter Rows (Genes)
+eset <- eset[rownames(eset) %in% protein_genes$hgnc_symbol, ] 
+
+# This removes the "-T" suffix so it matches the metadata perfectly
+colnames(eset) <- eset$subjectID
+
+# 2. Align Metadata
+# Ensure metadata rows match eset columns exactly
+rnaseq_meta <- master_metadata[match(colnames(eset), master_metadata$subjectID), ]
+
+# 3. Create SE
+# This check will now PASS because both are "C3L-00977", "C3L-00987", etc.
+testthat::expect_equal(colnames(eset), rnaseq_meta$subjectID)
+
+se_RNAseq <- SummarizedExperiment(
+    assays = list(DESeq2_log = exprs(eset)), 
+    colData = rnaseq_meta
+)
+
+saveRDS(se_RNAseq, file.path(DATA_DIR, "CPTAC_se_RNAseq.rds"))
+```
+
+# Create GISTIC CNA summarizedexperiment 
+
+Filtering to protein coding, autosomal genes only 
+
+```{r}
+# 1. Load and Clean GISTIC
+gistic <- fread(file.path(HNSC_DIR, "HNSCC_WES_CNV_gene_gistic_level.txt"), data.table = FALSE)
+gistic$clean_id <- sub("\\..*", "", gistic$idx)
+
+# 2. Filter & Map Genes
+gistic_filtered <- gistic %>%
+  dplyr::inner_join(protein_genes, by = c("clean_id" = "ensembl_gene_id"))
+
+# 3. Handle Duplicates
+gistic_unique <- gistic_filtered %>%
+  dplyr::distinct(hgnc_symbol, .keep_all = TRUE)
+
+rownames(gistic_unique) <- gistic_unique$hgnc_symbol
+
+# 4. Prepare Matrix
+meta_cols <- c("idx", "clean_id", "hgnc_symbol")
+count_matrix <- gistic_unique[, !colnames(gistic_unique) %in% meta_cols]
+
+# 5. Filter Samples using MASTER metadata
+# This ensures we ignore the filtering done in the RNA-seq step and look at the global valid patients
+samples_to_keep <- colnames(count_matrix)[colnames(count_matrix) %in% master_metadata$subjectID]
+count_matrix <- count_matrix[, samples_to_keep]
+
+# 6. Align Metadata
+gistic_meta <- master_metadata[match(colnames(count_matrix), master_metadata$subjectID), ]
+
+# 7. Create SE
+testthat::expect_equal(colnames(count_matrix), gistic_meta$subjectID)
+
+se_gistic <- SummarizedExperiment(
+  assays = list(gistic = as.matrix(count_matrix)), 
+  colData = gistic_meta
+)
+
+saveRDS(se_gistic, file.path(DATA_DIR, "CPTAC_se_gistic.rds"))
+```
+
+# Harmonization & Export for SurvHive (python survival analysis libraries)
+
+## Harmonizing the TCGA Discovery cohort data real quick 
+
+- We will verify it has just protein coding autosomal genes (feature level filtering). Then we will verify that the metadata has two processed survival columns, OS_days (time-to-event) and OS_event (censoring status)
+
+### TCGA RNA-seq 
+
+```{r}
+# 1. Load Data
+TCGA_RNAseq <- readRDS('/restricted/projectnb/agedisease/projects/pancancer_aging_pbock/data/RNAseq/processed_SummarizedExperiments/TCGA-HNSC_RNAseq.rds')
+
+# 2. Filter for Protein Coding Genes
+# (Using the autosomal_protein_genes object loaded in previous chunks)
+TCGA_RNAseq <- TCGA_RNAseq[rownames(TCGA_RNAseq) %in% autosomal_protein_genes$hgnc_symbol, ]
+
+# 3. Process Survival Metadata
+# Create unified OS_days and OS_event columns
+# Note: TCGA vital_status is often "Dead"/"Alive". We convert to 1/0.
+colData(TCGA_RNAseq)$OS_event <- ifelse(colData(TCGA_RNAseq)$vital_status == "Dead", 1, 0)
+
+colData(TCGA_RNAseq)$OS_days <- ifelse(
+  colData(TCGA_RNAseq)$vital_status == "Dead",
+  colData(TCGA_RNAseq)$days_to_death,
+  colData(TCGA_RNAseq)$days_to_last_follow_up
+)
+
+# 4. Filter Patients (HPV Negative & Valid Survival)
+# We assume 'HPV.status' exists as per your snippet. Adjust levels if needed (e.g., "Negative", "Positive").
+valid_samples <- colData(TCGA_RNAseq) %>%
+  as.data.frame() %>%
+  dplyr::filter(HPV.status == "Negative") %>%  # Keep only HPV Negative
+  dplyr::filter(!is.na(OS_days) & OS_days > 0) %>% # Remove missing/zero survival
+  dplyr::filter(!is.na(OS_event)) %>%
+  rownames()
+
+# Apply Filter
+TCGA_RNAseq <- TCGA_RNAseq[, valid_samples]
+
+# 5. Save Discovery RNA-seq SE
+saveRDS(TCGA_RNAseq, file.path(DATA_DIR, "TCGA_se_RNAseq.rds"))
+message(paste("TCGA RNA-seq processed. Remaining samples:", ncol(TCGA_RNAseq)))
+```
+
+### TCGA GISTIC 
+
+```{r}
+# 1. Load Data
+root_dir <- "/restricted/projectnb/agedisease/projects/oralcancer/aging/pnarnur"
+path_processed_SE <- file.path(root_dir, "data", "processed_data", "scna", "GISTIC", "SE")
+TCGA_gistic <- readRDS(file.path(path_processed_SE, "TCGA-HNSC_SCNA_GISTIC_gene.RDS"))
+
+# 2. Filter for Protein Coding Genes
+TCGA_gistic <- TCGA_gistic[rownames(TCGA_gistic) %in% autosomal_protein_genes$hgnc_symbol, ]
+
+# 3. align Samples to RNA-seq
+# The TCGA barcodes usually match the first 12 or 15 characters. 
+# However, if both objects come from TCGAbiolinks, the colnames are usually full barcodes.
+# We intersect strictly to ensure paired data.
+
+common_samples <- intersect(colnames(TCGA_RNAseq), colnames(TCGA_gistic))
+
+# Subset both to the intersection (just in case GISTIC has fewer samples than RNAseq)
+TCGA_RNAseq_matched <- TCGA_RNAseq[, common_samples]
+TCGA_gistic_matched <- TCGA_gistic[, common_samples]
+
+# 4. Transfer Cleaned Metadata
+# We overwrite the GISTIC colData with the cleaned RNA-seq colData (containing OS_days, etc.)
+# to ensure 100% metadata consistency between omics layers.
+colData(TCGA_gistic_matched) <- colData(TCGA_RNAseq_matched)
+
+#PN: additional step, let's make the five_levels assay in the GISTIC summarizedexperiment into an assay called "gistic". 
+assays(TCGA_gistic_matched) <- list(gistic = assay(TCGA_gistic_matched, "five_levels"))
+
+# 5. Save Discovery GISTIC SE
+saveRDS(TCGA_gistic_matched, file.path(DATA_DIR, "TCGA_se_gistic.rds"))
+
+# Update the RNAseq save as well if we dropped samples during intersection
+saveRDS(TCGA_RNAseq_matched, file.path(DATA_DIR, "TCGA_se_RNAseq.rds"))
+
+message(paste("TCGA GISTIC processed. Matched samples:", ncol(TCGA_gistic_matched)))
+```
+
+# EXPORT FEATURE AND SAMPLE INFO TO PYTHON, FROM BOTH DISCOVERY AND VALIDATION DATASETS 
+
+PENDING: We will add BMI information later for TCGA, this is missing. But we should be able to add this from the genomic data commons later. 
+
+```{r}
+# EXPORT FEATURE AND SAMPLE INFO TO PYTHON, FROM BOTH DISCOVERY AND VALIDATION DATASETS 
+
+# PENDING: We will add BMI information later for TCGA, this is missing. 
+# But we should be able to add this from the genomic data commons later. 
+
+# Load the SE objects
+DATA_DIR <- here("CPTAC", "data")
+se_rna_cptac <- readRDS(file.path(DATA_DIR, "CPTAC_se_RNAseq.rds"))
+se_cnv_cptac <- readRDS(file.path(DATA_DIR, "CPTAC_se_gistic.rds"))
+se_rna_tcga  <- readRDS(file.path(DATA_DIR, "TCGA_se_RNAseq.rds"))
+se_cnv_tcga  <- readRDS(file.path(DATA_DIR, "TCGA_se_gistic.rds"))
+
+# --- 0. CRITICAL: PRE-EXPORT FEATURE HARMONIZATION ---
+# Find the Intersection of Genes (Features) across COHORTS
+# We need genes that exist in BOTH CPTAC AND TCGA to allow for valid validation
+common_rna_genes <- intersect(rownames(se_rna_cptac), rownames(se_rna_tcga))
+common_cnv_genes <- intersect(rownames(se_cnv_cptac), rownames(se_cnv_tcga))
+
+message(paste("Common RNA Genes found:", length(common_rna_genes)))
+message(paste("Common CNV Genes found:", length(common_cnv_genes)))
+
+# Subset all objects to these common features
+# This ensures that RNA_GeneA in Discovery is the same column as RNA_GeneA in Validation
+se_rna_tcga  <- se_rna_tcga[common_rna_genes, ]
+se_cnv_tcga  <- se_cnv_tcga[common_cnv_genes, ]
+se_rna_cptac <- se_rna_cptac[common_rna_genes, ]
+se_cnv_cptac <- se_cnv_cptac[common_cnv_genes, ]
+
+# --- 1. Define Feature Mapping ---
+# Format: "Standard_Name" = "Original_Column_Name"
+
+# Mapping for TCGA (Discovery) These are out clinical variables of interest
+tcga_map <- c(
+  "Age"             = "age_at_diagnosis",
+  "Gender"          = "gender",
+  "Stage"           = "ajcc_pathologic_stage",
+  "T_Stage"         = "ajcc_pathologic_t",
+  "N_Stage"         = "ajcc_pathologic_n",
+  "Grade"           = "histological_grade",
+  "Alcohol_History" = "alcohol_history",
+  "Pack_Years"      = "pack_years_smoked",
+  # TCGA Missing columns (will be created as NA later): BMI
+  "OS_days"         = "OS_days",
+  "OS_event"        = "OS_event"
+)
+
+# Mapping for CPTAC (Validation) These are out clinical variables of interest
+cptac_map <- c(
+  "Age"             = "age",
+  "Gender"          = "gender",
+  "Stage"           = "tumor_stage",
+  "T_Stage"         = "patho_staging_pt",
+  "N_Stage"         = "patho_staging_pn",
+  "Grade"           = "histologic_grade",
+  "Alcohol_History" = "alcohol_consum",
+  "Pack_Years"      = "num_pack_years_sm",
+  #"BMI"             = "BMI", # Unique to CPTAC We can add this in when we have it for TCGA
+  "OS_days"         = "OS_days",
+  "OS_event"        = "OS_event"
+)
+
+# --- 2. Processing Function ---
+export_harmonized_data <- function(se_rna, se_cnv, cohort_name, col_map) {
+  message(paste0("\n--- Processing ", cohort_name, " ---"))
+  
+  # A. Intersect Samples (Omics overlap)
+  common_samples <- intersect(colnames(se_rna), colnames(se_cnv))
+  se_rna_sub <- se_rna[, common_samples]
+  se_cnv_sub <- se_cnv[, common_samples]
+  message(paste("Matched samples:", length(common_samples)))
+
+  # B. Extract and Rename Clinical Data
+  meta_df <- as.data.frame(colData(se_rna_sub)) %>%
+    tibble::rownames_to_column("patient_id")
+  
+  # Select only mapped columns and rename them
+  # We use a loop/check to handle missing BMI in TCGA gracefully
+  clin_clean <- meta_df %>% dplyr::select(patient_id)
+  
+  for (std_name in names(col_map)) {
+    orig_name <- col_map[[std_name]]
+    
+    if (orig_name %in% colnames(meta_df)) {
+      clin_clean[[std_name]] <- meta_df[[orig_name]]
+    } else {
+      # If column doesn't exist (e.g., BMI in TCGA), fill with NA
+      clin_clean[[std_name]] <- NA
+    }
+  }
+  
+  # Standardize Categorical Values (Optional but recommended)
+  # Unify Gender to "Male"/"Female" if capitalization differs
+  if ("Gender" %in% colnames(clin_clean)) {
+    clin_clean$Gender <- str_to_title(clin_clean$Gender)
+  }
+
+  # C. Extract Omics (Features as Columns)
+  message("Extracting RNA matrix...")
+  rna_mat <- t(assay(se_rna_sub, "DESeq2_log"))
+  colnames(rna_mat) <- paste0("RNA_", colnames(rna_mat))
+  
+  message("Extracting CNV matrix...")
+  cnv_mat <- t(assay(se_cnv_sub, "gistic"))
+  colnames(cnv_mat) <- paste0("CNV_", colnames(cnv_mat))
+  
+  # D. Merge Clinical + Omics
+  # We use cbind because we ensured order via `common_samples` earlier
+  full_df <- cbind(clin_clean, as.data.frame(rna_mat), as.data.frame(cnv_mat))
+  
+  # E. Save
+  out_file <- file.path(DATA_DIR, paste0(cohort_name, "_Harmonized_Full_Data.csv"))
+  data.table::fwrite(full_df, out_file)
+  message(paste("Saved:", out_file))
+  message(paste("Dimensions:", nrow(full_df), "rows x", ncol(full_df), "cols"))
+}
+
+# --- 3. Execute ---
+export_harmonized_data(se_rna_tcga, se_cnv_tcga, "TCGA_Discovery", tcga_map)
+export_harmonized_data(se_rna_cptac, se_cnv_cptac, "CPTAC_Validation", cptac_map)
+```
+
+
