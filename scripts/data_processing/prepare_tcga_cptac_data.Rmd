@@ -1,5 +1,5 @@
 ---
-title: "CPTAC HNSCC Data Integration"
+title: "Prepare TCGA and CPTAC HNSCC Survival Datasets"
 output: html_document
 date: "`r Sys.Date()`"
 ---
@@ -7,6 +7,15 @@ date: "`r Sys.Date()`"
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
+
+# Purpose
+
+This notebook prepares harmonized HPV-negative HNSCC discovery and validation tables for the Python survival-modeling workflow. It builds matched RNA-seq and GISTIC/SCNA `SummarizedExperiment` objects for CPTAC and TCGA, standardizes core clinical variables, intersects shared RNA/CNV features across cohorts, and exports two wide CSV files:
+
+- `CPTAC/data/TCGA_Discovery_Harmonized_Full_Data.csv`
+- `CPTAC/data/CPTAC_Validation_Harmonized_Full_Data.csv`
+
+These CSVs are the expected inputs for `scripts/modeling/train_survival_models.py`.
 
 ```{r}
 # Data Manipulation
@@ -68,8 +77,7 @@ protein_genes <- autosomal_protein_genes %>%
 
 ## Combining survival and other patient metadata 
 
-Read this, this is cool [How to Combine Two Data Frames in R with Different Columns Using Base R, dplyr, and data.table](https://www.spsanderson.com/steveondata/posts/2024-10-10/)
-
+This section combines CPTAC phenotype, survival, and metadata tables, filters to HPV-negative tumors with usable overall-survival fields, and aligns patient metadata to the RNA-seq samples.
 
 ```{r}
 # Load Raw Metadata Files
@@ -261,13 +269,12 @@ message(paste("TCGA GISTIC processed. Matched samples:", ncol(TCGA_gistic_matche
 
 # EXPORT FEATURE AND SAMPLE INFO TO PYTHON, FROM BOTH DISCOVERY AND VALIDATION DATASETS 
 
-PENDING: We will add BMI information later for TCGA, this is missing. But we should be able to add this from the genomic data commons later. 
+Note: BMI is intentionally not exported because it is not available in the current TCGA mapping. It can be added later if TCGA BMI is retrieved from GDC and harmonized with CPTAC.
 
 ```{r}
 # EXPORT FEATURE AND SAMPLE INFO TO PYTHON, FROM BOTH DISCOVERY AND VALIDATION DATASETS 
 
-# PENDING: We will add BMI information later for TCGA, this is missing. 
-# But we should be able to add this from the genomic data commons later. 
+# BMI is intentionally omitted until it is available and harmonized in both cohorts.
 
 # Load the SE objects
 DATA_DIR <- here("CPTAC", "data")

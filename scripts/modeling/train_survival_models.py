@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Optimized Survival Prediction v7: TCGA → CPTAC
-TARGET: Test C-index >= 0.65 with MINIMUM 4 SCNA features
+Train and evaluate HNSCC survival models: TCGA discovery → CPTAC validation.
+
+Target: test C-index >= 0.65 with at least 4 SCNA features.
 
 Multi-Omics Integration with Guaranteed SCNA Inclusion:
 
@@ -24,34 +25,140 @@ SUCCESS CRITERIA (Hard Requirements):
 - At least 4 SCNA features selected via unbiased method
 - Test C-index >= 0.6448 (must match or beat v6)
 
+Inputs:
+    --train-data: TCGA discovery CSV exported by the data-preparation notebook.
+    --test-data: CPTAC validation CSV exported by the data-preparation notebook.
+    --output: Parent directory for timestamped model outputs.
+
+Main outputs:
+    all_results.csv, best_model_features.csv, selected_rna_features.csv,
+    selected_scna_features.csv, and top20_scna_features.csv.
+
+Example:
+    python scripts/modeling/train_survival_models.py \
+        --train-data CPTAC/data/TCGA_Discovery_Harmonized_Full_Data.csv \
+        --test-data CPTAC/data/CPTAC_Validation_Harmonized_Full_Data.csv \
+        --output results/model_runs
+
 Based on literature:
 - Priority-Lasso: https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-018-2344-6
 - Multi-omics benchmark: https://pmc.ncbi.nlm.nih.gov/articles/PMC10162996/
 """
 
 import argparse
+import importlib
 import os
-import numpy as np
-import pandas as pd
 import warnings
 from datetime import datetime
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import StratifiedKFold
-from sksurv.linear_model import CoxnetSurvivalAnalysis
-from sksurv.ensemble import RandomSurvivalForest, GradientBoostingSurvivalAnalysis
-from sksurv.metrics import concordance_index_censored
+
+np = None
+pd = None
+StandardScaler = None
+CoxnetSurvivalAnalysis = None
+RandomSurvivalForest = None
+concordance_index_censored = None
 
 warnings.filterwarnings("ignore")
 
 
+def load_modeling_dependencies():
+    """Import heavy scientific dependencies after argparse so --help always works."""
+    global np, pd, StandardScaler, CoxnetSurvivalAnalysis
+    global RandomSurvivalForest, concordance_index_censored
+
+    np = importlib.import_module("numpy")
+    pd = importlib.import_module("pandas")
+    StandardScaler = importlib.import_module("sklearn.preprocessing").StandardScaler
+    CoxnetSurvivalAnalysis = importlib.import_module(
+        "sksurv.linear_model"
+    ).CoxnetSurvivalAnalysis
+    RandomSurvivalForest = importlib.import_module(
+        "sksurv.ensemble"
+    ).RandomSurvivalForest
+    concordance_index_censored = importlib.import_module(
+        "sksurv.metrics"
+    ).concordance_index_censored
+
+
 def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--train-data", required=True)
-    parser.add_argument("--test-data", required=True)
-    parser.add_argument("--output", required=True)
-    parser.add_argument("--n-jobs", type=int, default=4)
-    parser.add_argument("--seed", type=int, default=42)
+    parser = argparse.ArgumentParser(
+        description="Train TCGA-discovery and CPTAC-validation HNSCC survival models"
+    )
+    parser.add_argument("--train-data", required=True, help="Harmonized TCGA discovery CSV")
+    parser.add_argument("--test-data", required=True, help="Harmonized CPTAC validation CSV")
+    parser.add_argument("--output", required=True, help="Parent output directory")
+    parser.add_argument("--n-jobs", type=int, default=4, help="Parallel jobs for RSF models")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
     return parser.parse_args()
+
+
+# =============================================================================
+# INPUT VALIDATION AND PREPROCESSING HELPERS
+# =============================================================================
+
+
+def ensure_columns(df, required_cols, label):
+    """Fail early with a clear message if required columns are missing."""
+    missing = [col for col in required_cols if col not in df.columns]
+    if missing:
+        raise ValueError(f"{label} is missing required columns: {missing}")
+
+
+def coerce_event_column(series):
+    """Convert common OS_event encodings to bool without treating string '0' as True."""
+    def convert(value):
+        if pd.isna(value):
+            return False
+        if isinstance(value, (bool, np.bool_)):
+            return bool(value)
+        if isinstance(value, (int, float, np.integer, np.floating)):
+            return bool(int(value))
+        value_str = str(value).strip().lower()
+        if value_str in {"1", "true", "t", "yes", "y", "dead", "deceased", "event"}:
+            return True
+        if value_str in {"0", "false", "f", "no", "n", "alive", "censored"}:
+            return False
+        raise ValueError(f"Unrecognized OS_event value: {value!r}")
+
+    return series.map(convert).astype(bool)
+
+
+def common_omic_columns(train_df, test_df, prefix):
+    """Return train-ordered omics columns that also exist in the test cohort."""
+    train_cols = [c for c in train_df.columns if c.startswith(prefix)]
+    test_cols = set(c for c in test_df.columns if c.startswith(prefix))
+    common_cols = [c for c in train_cols if c in test_cols]
+    dropped = len(train_cols) - len(common_cols)
+    if dropped:
+        print(f"  [{prefix}] Dropping {dropped} train-only features not present in test data")
+    if not common_cols:
+        raise ValueError(f"No shared {prefix} features found between train and test data")
+    return common_cols
+
+
+def impute_and_scale_block(train_df, test_df, cols, label):
+    """Numeric coercion, train-median imputation, and standard scaling for one feature block."""
+    X_train = train_df[cols].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+    X_test = test_df[cols].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+    col_means = np.nanmean(X_train, axis=0)
+    col_means = np.where(np.isnan(col_means), 0, col_means)
+    train_missing = np.where(np.isnan(X_train))
+    test_missing = np.where(np.isnan(X_test))
+    X_train[train_missing] = np.take(col_means, train_missing[1])
+    X_test[test_missing] = np.take(col_means, test_missing[1])
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    print(f"  {label} features: {len(cols)}")
+    return X_train_scaled, X_test_scaled
+
+
+def top_feature_indices(scores, requested_n):
+    """Select up to requested_n feature indices, ordered from strongest to weakest."""
+    requested_n = min(int(requested_n), len(scores))
+    if requested_n <= 0:
+        return np.array([], dtype=int)
+    return np.argsort(scores)[-requested_n:][::-1]
 
 
 # =============================================================================
@@ -62,12 +169,14 @@ def parse_args():
 def harmonize_clinical_data(train_df, test_df):
     """Apply all harmonization steps"""
 
-    train_age = train_df["Age"].copy()
-    if train_age.median() > 1000:
-        print("  [Age] Converting TCGA from days to years")
-        train_df["Age"] = train_age / 365.25
     train_df["Age"] = pd.to_numeric(train_df["Age"], errors="coerce")
     test_df["Age"] = pd.to_numeric(test_df["Age"], errors="coerce")
+    if train_df["Age"].median(skipna=True) > 1000:
+        print("  [Age] Converting TCGA from days to years")
+        train_df["Age"] = train_df["Age"] / 365.25
+    train_age_median = train_df["Age"].median(skipna=True)
+    train_df["Age"] = train_df["Age"].fillna(train_age_median)
+    test_df["Age"] = test_df["Age"].fillna(train_age_median)
 
     for df in [train_df, test_df]:
         df["Gender"] = df["Gender"].astype(str).str.lower().str.strip()
@@ -143,7 +252,9 @@ def harmonize_clinical_data(train_df, test_df):
 
     train_df["Pack_Years"] = pd.to_numeric(train_df["Pack_Years"], errors="coerce")
     test_df["Pack_Years"] = pd.to_numeric(test_df["Pack_Years"], errors="coerce")
-    median_py = train_df["Pack_Years"].median()
+    median_py = train_df["Pack_Years"].median(skipna=True)
+    if pd.isna(median_py):
+        median_py = 0
     train_df["Pack_Years"] = train_df["Pack_Years"].fillna(median_py)
     test_df["Pack_Years"] = test_df["Pack_Years"].fillna(median_py)
 
@@ -198,7 +309,7 @@ def univariate_cindex_scores(X, y):
                 continue
             c_idx, _, _, _, _ = concordance_index_censored(event, time, x_j)
             scores[j] = abs(c_idx - 0.5)
-        except:
+        except Exception:
             pass
 
     return scores
@@ -237,7 +348,7 @@ def stability_selection_per_block(X, y, n_bootstrap=100, top_k=50, seed=42):
                     event_boot, time_boot, x_j
                 )
                 scores[j] = abs(c_idx - 0.5)
-            except:
+            except Exception:
                 pass
 
         top_idx = np.argsort(scores)[-top_k:]
@@ -301,7 +412,8 @@ def tune_rsf_aggressive(X_train, y_train, n_jobs=4, seed=42):
                 best_model = model
                 best_params = params
 
-        except Exception as e:
+        except Exception as exc:
+            print(f"    RSF parameter set failed: {exc}")
             continue
 
     return best_model, best_params
@@ -314,6 +426,7 @@ def tune_rsf_aggressive(X_train, y_train, n_jobs=4, seed=42):
 
 def main():
     args = parse_args()
+    load_modeling_dependencies()
     np.random.seed(args.seed)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -344,10 +457,23 @@ def main():
     train_df = pd.read_csv(args.train_data)
     test_df = pd.read_csv(args.test_data)
 
+    required_cols = [
+        "Age", "Gender", "Stage", "T_Stage", "N_Stage",
+        "Grade", "Alcohol_History", "Pack_Years", "OS_days", "OS_event",
+    ]
+    ensure_columns(train_df, required_cols, "Training data")
+    ensure_columns(test_df, required_cols, "Test data")
+
     train_df, test_df = harmonize_clinical_data(train_df, test_df)
 
-    train_df["OS_event"] = train_df["OS_event"].astype(bool)
-    test_df["OS_event"] = test_df["OS_event"].astype(bool)
+    train_df["OS_days"] = pd.to_numeric(train_df["OS_days"], errors="coerce")
+    test_df["OS_days"] = pd.to_numeric(test_df["OS_days"], errors="coerce")
+    train_df["OS_event"] = coerce_event_column(train_df["OS_event"])
+    test_df["OS_event"] = coerce_event_column(test_df["OS_event"])
+    train_df = train_df.dropna(subset=["OS_days"]).copy()
+    test_df = test_df.dropna(subset=["OS_days"]).copy()
+    train_df = train_df[train_df["OS_days"] > 0].copy()
+    test_df = test_df[test_df["OS_days"] > 0].copy()
 
     y_train = np.array(
         list(zip(train_df["OS_event"], train_df["OS_days"])),
@@ -374,8 +500,8 @@ def main():
         "Age", "Gender", "Stage", "T_Stage", "N_Stage",
         "Grade", "Alcohol_History", "Pack_Years",
     ]
-    rna_cols = [c for c in train_df.columns if c.startswith("RNA_")]
-    cnv_cols = [c for c in train_df.columns if c.startswith("CNV_")]
+    rna_cols = common_omic_columns(train_df, test_df, "RNA_")
+    cnv_cols = common_omic_columns(train_df, test_df, "CNV_")
 
     # Process clinical
     X_train_clin, X_test_clin, clin_names = process_clinical_features(
@@ -383,31 +509,13 @@ def main():
     )
     print(f"  Clinical features: {len(clin_names)}")
 
-    # Process RNA
-    X_train_rna = train_df[rna_cols].values.astype(float)
-    X_test_rna = test_df[rna_cols].values.astype(float)
-    col_means_rna = np.nanmean(X_train_rna, axis=0)
-    col_means_rna = np.where(np.isnan(col_means_rna), 0, col_means_rna)
-    for j in range(X_train_rna.shape[1]):
-        X_train_rna[np.isnan(X_train_rna[:, j]), j] = col_means_rna[j]
-        X_test_rna[np.isnan(X_test_rna[:, j]), j] = col_means_rna[j]
-    rna_scaler = StandardScaler()
-    X_train_rna_scaled = rna_scaler.fit_transform(X_train_rna)
-    X_test_rna_scaled = rna_scaler.transform(X_test_rna)
-    print(f"  RNA features: {len(rna_cols)}")
-
-    # Process CNV/SCNA
-    X_train_cnv = train_df[cnv_cols].values.astype(float)
-    X_test_cnv = test_df[cnv_cols].values.astype(float)
-    col_means_cnv = np.nanmean(X_train_cnv, axis=0)
-    col_means_cnv = np.where(np.isnan(col_means_cnv), 0, col_means_cnv)
-    for j in range(X_train_cnv.shape[1]):
-        X_train_cnv[np.isnan(X_train_cnv[:, j]), j] = col_means_cnv[j]
-        X_test_cnv[np.isnan(X_test_cnv[:, j]), j] = col_means_cnv[j]
-    cnv_scaler = StandardScaler()
-    X_train_cnv_scaled = cnv_scaler.fit_transform(X_train_cnv)
-    X_test_cnv_scaled = cnv_scaler.transform(X_test_cnv)
-    print(f"  CNV/SCNA features: {len(cnv_cols)}")
+    # Process RNA and CNV/SCNA blocks with train-only imputation/scaling
+    X_train_rna_scaled, X_test_rna_scaled = impute_and_scale_block(
+        train_df, test_df, rna_cols, "RNA"
+    )
+    X_train_cnv_scaled, X_test_cnv_scaled = impute_and_scale_block(
+        train_df, test_df, cnv_cols, "CNV/SCNA"
+    )
 
     # Calculate univariate scores for each block
     print("\n  Calculating univariate C-index scores...")
@@ -415,8 +523,8 @@ def main():
     cnv_scores = univariate_cindex_scores(X_train_cnv_scaled, y_train)
 
     # Report top features from each block
-    top_rna_idx = np.argsort(rna_scores)[-10:][::-1]
-    top_cnv_idx = np.argsort(cnv_scores)[-10:][::-1]
+    top_rna_idx = top_feature_indices(rna_scores, 10)
+    top_cnv_idx = top_feature_indices(cnv_scores, 10)
 
     print("\n  Top 10 RNA features by C-index deviation:")
     for i, idx in enumerate(top_rna_idx):
@@ -452,12 +560,14 @@ def main():
         print(f"\n  [Block-Constrained: {n_rna} RNA + {n_cnv} SCNA]")
 
         # Select top features from each block
-        top_rna_idx = np.argsort(rna_scores)[-n_rna:]
-        top_cnv_idx = np.argsort(cnv_scores)[-n_cnv:]
+        top_rna_idx = top_feature_indices(rna_scores, n_rna)
+        top_cnv_idx = top_feature_indices(cnv_scores, n_cnv)
 
         # Get selected feature names
         selected_rna = [rna_cols[i] for i in top_rna_idx]
         selected_cnv = [cnv_cols[i] for i in top_cnv_idx]
+        n_rna_actual = len(selected_rna)
+        n_cnv_actual = len(selected_cnv)
 
         # Combine features
         X_train_sel = np.hstack([
@@ -489,17 +599,17 @@ def main():
 
         results.append({
             "Experiment": "Block_Constrained",
-            "Config": f"RNA{n_rna}_SCNA{n_cnv}",
+            "Config": f"RNA{n_rna_actual}_SCNA{n_cnv_actual}",
             "N_Clinical": len(clin_names),
-            "N_RNA": n_rna,
-            "N_SCNA": n_cnv,
+            "N_RNA": n_rna_actual,
+            "N_SCNA": n_cnv_actual,
             "N_Total": len(feature_names_sel),
             "OOB_C": oob_c,
             "Train_C": train_c,
             "Test_C": test_c,
         })
 
-        all_models[f"Block_RNA{n_rna}_SCNA{n_cnv}"] = {
+        all_models[f"Block_RNA{n_rna_actual}_SCNA{n_cnv_actual}"] = {
             "model": model,
             "X_test": X_test_sel,
             "features": feature_names_sel,
@@ -541,7 +651,7 @@ def main():
 
     # Select top RNA features
     n_rna_priority = 50
-    top_rna_idx = np.argsort(rna_scores)[-n_rna_priority:]
+    top_rna_idx = top_feature_indices(rna_scores, n_rna_priority)
     X_train_rna_sel = X_train_rna_scaled[:, top_rna_idx]
     X_test_rna_sel = X_test_rna_scaled[:, top_rna_idx]
 
@@ -571,7 +681,7 @@ def main():
 
     # Select top SCNA features (minimum 4)
     for n_scna_priority in [10, 8, 6, 4]:
-        top_cnv_idx = np.argsort(cnv_scores)[-n_scna_priority:]
+        top_cnv_idx = top_feature_indices(cnv_scores, n_scna_priority)
         X_train_cnv_sel = X_train_cnv_scaled[:, top_cnv_idx]
         X_test_cnv_sel = X_test_cnv_scaled[:, top_cnv_idx]
 
@@ -591,22 +701,24 @@ def main():
 
             selected_rna_names = [rna_cols[i] for i in top_rna_idx]
             selected_cnv_names = [cnv_cols[i] for i in top_cnv_idx]
+            n_rna_priority_actual = len(selected_rna_names)
+            n_scna_priority_actual = len(selected_cnv_names)
 
             print(f"    Clinical+RNA+SCNA{n_scna_priority} Test C-index: {full_test_c:.4f}")
 
             results.append({
                 "Experiment": "Priority_Lasso",
-                "Config": f"RNA{n_rna_priority}_SCNA{n_scna_priority}",
+                "Config": f"RNA{n_rna_priority_actual}_SCNA{n_scna_priority_actual}",
                 "N_Clinical": len(clin_names),
-                "N_RNA": n_rna_priority,
-                "N_SCNA": n_scna_priority,
-                "N_Total": len(clin_names) + n_rna_priority + n_scna_priority,
+                "N_RNA": n_rna_priority_actual,
+                "N_SCNA": n_scna_priority_actual,
+                "N_Total": len(clin_names) + n_rna_priority_actual + n_scna_priority_actual,
                 "OOB_C": np.nan,
                 "Train_C": model_full.score(X_train_full, y_train),
                 "Test_C": full_test_c,
             })
 
-            all_models[f"PriorityLasso_RNA{n_rna_priority}_SCNA{n_scna_priority}"] = {
+            all_models[f"PriorityLasso_RNA{n_rna_priority_actual}_SCNA{n_scna_priority_actual}"] = {
                 "model": model_full,
                 "X_test": X_test_full,
                 "features": clin_names + selected_rna_names + selected_cnv_names,
@@ -628,7 +740,7 @@ def main():
     # Model A: Clinical + RNA (like v6 best)
     print("\n  Training RSF_RNA (Clinical + 75 RNA)...")
     n_rna_fusion = 75
-    top_rna_idx_fusion = np.argsort(rna_scores)[-n_rna_fusion:]
+    top_rna_idx_fusion = top_feature_indices(rna_scores, n_rna_fusion)
     X_train_rna_fusion = np.hstack([X_train_clin, X_train_rna_scaled[:, top_rna_idx_fusion]])
     X_test_rna_fusion = np.hstack([X_test_clin, X_test_rna_scaled[:, top_rna_idx_fusion]])
 
@@ -636,16 +748,18 @@ def main():
     if model_rna_rsf:
         test_c_rna = model_rna_rsf.score(X_test_rna_fusion, y_test)
         print(f"    RSF_RNA Test C-index: {test_c_rna:.4f}")
+        pred_rna_train_fusion = model_rna_rsf.predict(X_train_rna_fusion)
         pred_rna_fusion = model_rna_rsf.predict(X_test_rna_fusion)
     else:
         print("    RSF_RNA failed")
         test_c_rna = 0.5
+        pred_rna_train_fusion = np.zeros(len(train_df))
         pred_rna_fusion = np.zeros(len(test_df))
 
     # Model B: Clinical + SCNA
     print("\n  Training RSF_SCNA (Clinical + 20 SCNA)...")
     n_cnv_fusion = 20
-    top_cnv_idx_fusion = np.argsort(cnv_scores)[-n_cnv_fusion:]
+    top_cnv_idx_fusion = top_feature_indices(cnv_scores, n_cnv_fusion)
     X_train_cnv_fusion = np.hstack([X_train_clin, X_train_cnv_scaled[:, top_cnv_idx_fusion]])
     X_test_cnv_fusion = np.hstack([X_test_clin, X_test_cnv_scaled[:, top_cnv_idx_fusion]])
 
@@ -653,48 +767,74 @@ def main():
     if model_cnv_rsf:
         test_c_cnv = model_cnv_rsf.score(X_test_cnv_fusion, y_test)
         print(f"    RSF_SCNA Test C-index: {test_c_cnv:.4f}")
+        pred_cnv_train_fusion = model_cnv_rsf.predict(X_train_cnv_fusion)
         pred_cnv_fusion = model_cnv_rsf.predict(X_test_cnv_fusion)
     else:
         print("    RSF_SCNA failed")
         test_c_cnv = 0.5
+        pred_cnv_train_fusion = np.zeros(len(train_df))
         pred_cnv_fusion = np.zeros(len(test_df))
 
-    # Normalize predictions
-    pred_rna_norm = (pred_rna_fusion - pred_rna_fusion.mean()) / (pred_rna_fusion.std() + 1e-10)
-    pred_cnv_norm = (pred_cnv_fusion - pred_cnv_fusion.mean()) / (pred_cnv_fusion.std() + 1e-10)
+    def normalize_with_train(train_pred, test_pred):
+        center = train_pred.mean()
+        scale = train_pred.std() + 1e-10
+        return (train_pred - center) / scale, (test_pred - center) / scale
 
-    # Try different fusion weights
+    pred_rna_train_norm, pred_rna_norm = normalize_with_train(
+        pred_rna_train_fusion, pred_rna_fusion
+    )
+    pred_cnv_train_norm, pred_cnv_norm = normalize_with_train(
+        pred_cnv_train_fusion, pred_cnv_fusion
+    )
+
+    # Choose the fusion weight on training predictions, then report the locked
+    # weight on CPTAC. This avoids using the external validation cohort to tune
+    # the ensemble weight.
     print("\n  Testing fusion weights...")
+    best_fusion_train_c = 0
     best_fusion_c = 0
     best_alpha = 0
 
     for alpha in [0.95, 0.9, 0.85, 0.8, 0.75, 0.7]:
+        pred_fusion_train = alpha * pred_rna_train_norm + (1 - alpha) * pred_cnv_train_norm
+        train_fusion_c, _, _, _, _ = concordance_index_censored(
+            y_train["event"], y_train["time"], pred_fusion_train
+        )
         pred_fusion = alpha * pred_rna_norm + (1 - alpha) * pred_cnv_norm
         fusion_c, _, _, _, _ = concordance_index_censored(
             y_test["event"], y_test["time"], pred_fusion
         )
-        print(f"    α={alpha:.2f} (RNA={alpha:.0%}, SCNA={1-alpha:.0%}): Test C = {fusion_c:.4f}")
+        print(
+            f"    α={alpha:.2f} (RNA={alpha:.0%}, SCNA={1-alpha:.0%}): "
+            f"Train C = {train_fusion_c:.4f}, Test C = {fusion_c:.4f}"
+        )
 
-        if fusion_c > best_fusion_c:
+        if train_fusion_c > best_fusion_train_c:
+            best_fusion_train_c = train_fusion_c
             best_fusion_c = fusion_c
             best_alpha = alpha
 
-    print(f"\n  Best fusion: α={best_alpha:.2f}, Test C-index: {best_fusion_c:.4f}")
-
-    results.append({
-        "Experiment": "Late_Fusion",
-        "Config": f"RNA{n_rna_fusion}_SCNA{n_cnv_fusion}_alpha{best_alpha:.2f}",
-        "N_Clinical": len(clin_names),
-        "N_RNA": n_rna_fusion,
-        "N_SCNA": n_cnv_fusion,
-        "N_Total": len(clin_names) + n_rna_fusion + n_cnv_fusion,
-        "OOB_C": np.nan,
-        "Train_C": np.nan,
-        "Test_C": best_fusion_c,
-    })
+    print(
+        f"\n  Best fusion by training C-index: α={best_alpha:.2f}, "
+        f"Train C-index: {best_fusion_train_c:.4f}, Test C-index: {best_fusion_c:.4f}"
+    )
 
     selected_rna_fusion = [rna_cols[i] for i in top_rna_idx_fusion]
     selected_cnv_fusion = [cnv_cols[i] for i in top_cnv_idx_fusion]
+    n_rna_fusion_actual = len(selected_rna_fusion)
+    n_cnv_fusion_actual = len(selected_cnv_fusion)
+
+    results.append({
+        "Experiment": "Late_Fusion",
+        "Config": f"RNA{n_rna_fusion_actual}_SCNA{n_cnv_fusion_actual}_alpha{best_alpha:.2f}",
+        "N_Clinical": len(clin_names),
+        "N_RNA": n_rna_fusion_actual,
+        "N_SCNA": n_cnv_fusion_actual,
+        "N_Total": len(clin_names) + n_rna_fusion_actual + n_cnv_fusion_actual,
+        "OOB_C": np.nan,
+        "Train_C": best_fusion_train_c,
+        "Test_C": best_fusion_c,
+    })
 
     all_models[f"LateFusion_alpha{best_alpha:.2f}"] = {
         "model": (model_rna_rsf, model_cnv_rsf),
@@ -721,8 +861,8 @@ def main():
         n_rna_ipf = 60
         n_cnv_ipf = 10
 
-        top_rna_idx_ipf = np.argsort(rna_scores)[-n_rna_ipf:]
-        top_cnv_idx_ipf = np.argsort(cnv_scores)[-n_cnv_ipf:]
+        top_rna_idx_ipf = top_feature_indices(rna_scores, n_rna_ipf)
+        top_cnv_idx_ipf = top_feature_indices(cnv_scores, n_cnv_ipf)
 
         # Boost SCNA features
         X_train_cnv_boosted = X_train_cnv_scaled[:, top_cnv_idx_ipf] * scna_boost
@@ -748,14 +888,16 @@ def main():
 
             selected_rna_ipf = [rna_cols[i] for i in top_rna_idx_ipf]
             selected_cnv_ipf = [cnv_cols[i] for i in top_cnv_idx_ipf]
+            n_rna_ipf_actual = len(selected_rna_ipf)
+            n_cnv_ipf_actual = len(selected_cnv_ipf)
 
             results.append({
                 "Experiment": "IPF_Style",
-                "Config": f"RNA{n_rna_ipf}_SCNA{n_cnv_ipf}_boost{scna_boost}",
+                "Config": f"RNA{n_rna_ipf_actual}_SCNA{n_cnv_ipf_actual}_boost{scna_boost}",
                 "N_Clinical": len(clin_names),
-                "N_RNA": n_rna_ipf,
-                "N_SCNA": n_cnv_ipf,
-                "N_Total": len(clin_names) + n_rna_ipf + n_cnv_ipf,
+                "N_RNA": n_rna_ipf_actual,
+                "N_SCNA": n_cnv_ipf_actual,
+                "N_Total": len(clin_names) + n_rna_ipf_actual + n_cnv_ipf_actual,
                 "OOB_C": model_ipf.oob_score_,
                 "Train_C": model_ipf.score(X_train_ipf, y_train),
                 "Test_C": test_c_ipf,
@@ -796,12 +938,12 @@ def main():
     # Ensure minimum 4 SCNA
     if len(stable_cnv_idx) < 4:
         print(f"    Less than 4 stable SCNA, using top 4 by stability probability")
-        stable_cnv_idx = np.argsort(cnv_stability)[-4:]
+        stable_cnv_idx = top_feature_indices(cnv_stability, 4)
 
     # If too few stable RNA, use top by C-index
     if len(stable_rna_idx) < 30:
         print(f"    Less than 30 stable RNA, using top 50 by C-index")
-        stable_rna_idx = np.argsort(rna_scores)[-50:]
+        stable_rna_idx = top_feature_indices(rna_scores, 50)
 
     # Combine stable features
     X_train_stable = np.hstack([
@@ -854,6 +996,10 @@ def main():
     print("=" * 70)
 
     results_df = pd.DataFrame(results)
+    if results_df.empty:
+        print("No models completed successfully; writing empty results table.")
+        results_df.to_csv(os.path.join(output_dir, "all_results.csv"), index=False)
+        return
     results_df = results_df.sort_values("Test_C", ascending=False)
 
     print("\n--- ALL RESULTS (sorted by Test C-index) ---")
@@ -890,59 +1036,59 @@ def main():
     # Save results
     results_df.to_csv(os.path.join(output_dir, "all_results.csv"), index=False)
 
-    # Save feature lists for best model
-    if len(qualifying_models) > 0:
-        best_key = None
-        best_test_c = 0
-        for key, model_info in all_models.items():
-            if "scna_features" in model_info and len(model_info["scna_features"]) >= 4:
-                # Get test C-index
-                if isinstance(model_info["model"], tuple):
-                    # Late fusion
-                    continue
-                else:
-                    try:
-                        test_c = model_info["model"].score(model_info["X_test"], y_test)
-                        if test_c >= 0.6448 and test_c > best_test_c:
-                            best_test_c = test_c
-                            best_key = key
-                    except:
-                        continue
+    # Save feature lists for the selected model. If no model meets the hard
+    # success criteria, still save the best overall model so downstream
+    # enrichment has a real feature table to consume.
+    selected_summary_row = qualifying_models.iloc[0] if len(qualifying_models) > 0 else results_df.iloc[0]
 
-        if best_key and best_key in all_models:
-            best_model_info = all_models[best_key]
+    def infer_model_key(row):
+        experiment = row["Experiment"]
+        config = row["Config"]
+        if experiment == "Block_Constrained":
+            return f"Block_{config}"
+        if experiment == "Priority_Lasso":
+            return f"PriorityLasso_{config}"
+        if experiment == "Late_Fusion":
+            return f"LateFusion_alpha{str(config).split('alpha')[-1]}"
+        if experiment == "IPF_Style":
+            return f"IPF_boost{str(config).split('boost')[-1]}"
+        if experiment == "Stability_MultiBlock":
+            return "Stability_MultiBlock"
+        return None
 
-            # Save feature list
-            feature_df = pd.DataFrame({
-                "feature": best_model_info["features"],
-                "type": ["clinical"] * len(clin_names) +
-                        ["RNA"] * len(best_model_info["rna_features"]) +
-                        ["SCNA"] * len(best_model_info["scna_features"])
-            })
-            feature_df.to_csv(os.path.join(output_dir, "best_model_features.csv"), index=False)
+    best_key = infer_model_key(selected_summary_row)
+    if best_key not in all_models:
+        print(f"Warning: could not find stored model for feature export: {best_key}")
+    else:
+        best_model_info = all_models[best_key]
+        feature_df = pd.DataFrame({
+            "feature": best_model_info["features"],
+            "type": ["clinical"] * len(clin_names)
+                    + ["RNA"] * len(best_model_info["rna_features"])
+                    + ["SCNA"] * len(best_model_info["scna_features"]),
+        })
+        feature_df.to_csv(os.path.join(output_dir, "best_model_features.csv"), index=False)
 
-            # Save RNA and SCNA separately with scores
-            rna_feature_df = pd.DataFrame({
-                "feature": best_model_info["rna_features"],
-                "cindex_deviation": [rna_scores[rna_cols.index(f)] for f in best_model_info["rna_features"]]
-            })
-            rna_feature_df = rna_feature_df.sort_values("cindex_deviation", ascending=False)
-            rna_feature_df.to_csv(os.path.join(output_dir, "selected_rna_features.csv"), index=False)
+        rna_feature_df = pd.DataFrame({
+            "feature": best_model_info["rna_features"],
+            "cindex_deviation": [rna_scores[rna_cols.index(f)] for f in best_model_info["rna_features"]],
+        }).sort_values("cindex_deviation", ascending=False)
+        rna_feature_df.to_csv(os.path.join(output_dir, "selected_rna_features.csv"), index=False)
 
-            scna_feature_df = pd.DataFrame({
-                "feature": best_model_info["scna_features"],
-                "cindex_deviation": [cnv_scores[cnv_cols.index(f)] for f in best_model_info["scna_features"]]
-            })
-            scna_feature_df = scna_feature_df.sort_values("cindex_deviation", ascending=False)
-            scna_feature_df.to_csv(os.path.join(output_dir, "selected_scna_features.csv"), index=False)
+        scna_feature_df = pd.DataFrame({
+            "feature": best_model_info["scna_features"],
+            "cindex_deviation": [cnv_scores[cnv_cols.index(f)] for f in best_model_info["scna_features"]],
+        }).sort_values("cindex_deviation", ascending=False)
+        scna_feature_df.to_csv(os.path.join(output_dir, "selected_scna_features.csv"), index=False)
 
-            print(f"\nFeature lists saved to: {output_dir}")
+        print(f"\nFeature lists saved to: {output_dir}")
 
     # Save top SCNA features for reference
+    top_scna_indices = top_feature_indices(cnv_scores, 20)
     top_scna_df = pd.DataFrame({
-        "feature": [cnv_cols[i] for i in np.argsort(cnv_scores)[-20:][::-1]],
-        "cindex_deviation": [cnv_scores[i] for i in np.argsort(cnv_scores)[-20:][::-1]],
-        "stability": [cnv_stability[i] for i in np.argsort(cnv_scores)[-20:][::-1]]
+        "feature": [cnv_cols[i] for i in top_scna_indices],
+        "cindex_deviation": [cnv_scores[i] for i in top_scna_indices],
+        "stability": [cnv_stability[i] for i in top_scna_indices],
     })
     top_scna_df.to_csv(os.path.join(output_dir, "top20_scna_features.csv"), index=False)
 
