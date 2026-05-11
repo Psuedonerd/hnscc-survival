@@ -19,7 +19,7 @@ hnscc-survival/
 │   │   └── run_pathway_enrichment.py
 │   ├── data_processing/
 │   │   └── prepare_tcga_cptac_data.Rmd
-│   └── modeling/
+│   └── training/
 │       ├── check_v7_params.py
 │       └── train_survival_models.py
 ├── requirements.txt
@@ -68,13 +68,13 @@ mamba activate hnscc-survival
 
 ### R
 
-The data-preparation notebook is an R Markdown workflow. Install the R packages used in `scripts/data_processing/prepare_tcga_cptac_data.Rmd`, including `tidyverse`, `here`, `SummarizedExperiment`, `cBioPortalData`, `curatedTCGAData`, `TCGAbiolinks`, `biomaRt`, `janitor`, and related Bioconductor dependencies.
+The data processing file is an R Markdown workflow. Install the R packages used in `scripts/data_processing/prepare_tcga_cptac_data.Rmd`, including `tidyverse`, `here`, `SummarizedExperiment`, `cBioPortalData`, `curatedTCGAData`, `TCGAbiolinks`, `biomaRt`, `janitor`, and related Bioconductor dependencies.
 
 ## Workflow
 
 ### 1. Prepare TCGA and CPTAC survival tables
 
-Render the R Markdown notebook from the repository root:
+Either Knit or render the R Markdown notebook from the repository root:
 
 ```r
 rmarkdown::render("scripts/data_processing/prepare_tcga_cptac_data.Rmd")
@@ -171,4 +171,3 @@ python scripts/analysis/create_supplementary_table.py \
 - The intended training/validation design is TCGA discovery followed by CPTAC validation.
 - Overall survival is represented by `OS_days` and `OS_event`.
 - The current feature blocks are clinical variables, RNA expression features, and SCNA/CNV features.
-- BMI is not included in the current harmonized inputs because it must be consistently available in both cohorts before modeling.
