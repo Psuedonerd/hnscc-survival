@@ -1,17 +1,13 @@
 # HNSCC Survival
 
-This repository contains the current reproducible code artifacts for an HPV-negative head and neck squamous cell carcinoma (HNSCC) survival-analysis project. The central workflow is:
+This repository contains code and documentation for a head and neck squamous cell carcinoma (HNSCC) survival-analysis project focused on HPV-negative disease and clinicogenomic prediction.
 
-1. prepare harmonized TCGA discovery and CPTAC validation datasets;
-2. train and compare multi-omic survival models using clinical, RNA-seq, and SCNA/CNV features;
-3. run pathway enrichment on genes selected by the best survival model; and
-4. connect the code outputs back to the manuscript and presentation materials.
+The project uses data from:
 
-The current manuscript/paper artifact is stored at [`docs/HNSCC_Survival_Paper.pdf`](docs/HNSCC_Survival_Paper.pdf).
+- The Cancer Genome Atlas (TCGA)
+- Clinical Proteomic Tumor Analysis Consortium (CPTAC)
 
-## Project status
-
-This repo has been refactored around the files that are actually present in the project. The code is now organized by project stage rather than by historical script version. Historical names such as `optimized_survival_v7.py` and `pathway_enrichment_v7.py` were replaced with descriptive names so the repository is easier to explain.
+The current paper/manuscript artifact is available at [`docs/HNSCC_Survival_Paper.pdf`](docs/HNSCC_Survival_Paper.pdf).
 
 ## Repository layout
 
