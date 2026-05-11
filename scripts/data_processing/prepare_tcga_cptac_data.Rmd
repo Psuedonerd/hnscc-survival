@@ -32,6 +32,7 @@ library(S4Vectors)
 library(matrixStats)
 library(org.Hs.eg.db)
 library(AnnotationDbi)
+library(testthat)
 ```
 
 # Download CPTAC Pre-processed Data (LinkedOmics Freeze)
@@ -46,7 +47,6 @@ if (!dir.exists(DATA_DIR)) dir.create(DATA_DIR, recursive = TRUE)
 # Download and Unzip
 if (!dir.exists(HNSC_DIR)) {
   message("Downloading CPTAC HNSCC Data Freeze...")
-  # FIX: Removed markdown syntax from the URL string
   zip_url <- "https://cptac-pancancer-data.s3.us-west-2.amazonaws.com/data_freeze_v1.2_reorganized/zip_files/HNSCC.zip"
   zip_file <- file.path(DATA_DIR, "HNSCC.zip")
   
@@ -62,8 +62,11 @@ if (!dir.exists(HNSC_DIR)) {
 
 ```{r}
 # 1. Load and Prepare the Reference "Universe"
-hnsc_aging_dir <- "/restricted/projectnb/agedisease/projects/oralcancer/aging/pnarnur"
-autosomal_protein_genes <- readRDS(file.path(hnsc_aging_dir, "data", "raw_data", "data_summaries", "version_115_ensembl_protein_coding_autosomal_genes.RDS"))
+protein_gene_reference <- Sys.getenv(
+  "HNSCC_PROTEIN_GENE_REFERENCE",
+  file.path(DATA_DIR, "version_115_ensembl_protein_coding_autosomal_genes.RDS")
+)
+autosomal_protein_genes <- readRDS(protein_gene_reference)
 
 # Ensure the reference itself is unique by Symbol to prevent exploding joins
 # We prioritize the first Ensembl ID per symbol if duplicates exist in the reference
@@ -194,7 +197,11 @@ saveRDS(se_gistic, file.path(DATA_DIR, "CPTAC_se_gistic.rds"))
 
 ```{r}
 # 1. Load Data
-TCGA_RNAseq <- readRDS('/restricted/projectnb/agedisease/projects/pancancer_aging_pbock/data/RNAseq/processed_SummarizedExperiments/TCGA-HNSC_RNAseq.rds')
+tcga_rnaseq_rds <- Sys.getenv(
+  "HNSCC_TCGA_RNASEQ_RDS",
+  file.path(DATA_DIR, "TCGA-HNSC_RNAseq.rds")
+)
+TCGA_RNAseq <- readRDS(tcga_rnaseq_rds)
 
 # 2. Filter for Protein Coding Genes
 # (Using the autosomal_protein_genes object loaded in previous chunks)
@@ -232,9 +239,11 @@ message(paste("TCGA RNA-seq processed. Remaining samples:", ncol(TCGA_RNAseq)))
 
 ```{r}
 # 1. Load Data
-root_dir <- "/restricted/projectnb/agedisease/projects/oralcancer/aging/pnarnur"
-path_processed_SE <- file.path(root_dir, "data", "processed_data", "scna", "GISTIC", "SE")
-TCGA_gistic <- readRDS(file.path(path_processed_SE, "TCGA-HNSC_SCNA_GISTIC_gene.RDS"))
+tcga_gistic_rds <- Sys.getenv(
+  "HNSCC_TCGA_GISTIC_RDS",
+  file.path(DATA_DIR, "TCGA-HNSC_SCNA_GISTIC_gene.RDS")
+)
+TCGA_gistic <- readRDS(tcga_gistic_rds)
 
 # 2. Filter for Protein Coding Genes
 TCGA_gistic <- TCGA_gistic[rownames(TCGA_gistic) %in% autosomal_protein_genes$hgnc_symbol, ]

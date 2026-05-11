@@ -1,13 +1,8 @@
 # HNSCC Survival
 
-This repository contains code and documentation for a head and neck squamous cell carcinoma (HNSCC) survival-analysis project focused on HPV-negative disease and clinicogenomic prediction.
+Code for a head and neck squamous cell carcinoma (HNSCC) survival-analysis project focused on HPV-negative disease. The workflow prepares matched TCGA discovery and CPTAC validation cohorts, trains clinicogenomic survival models from clinical variables, RNA expression, and copy-number alteration features, and generates downstream biological-interpretation and figure outputs.
 
-The project uses data from:
-
-- The Cancer Genome Atlas (TCGA)
-- Clinical Proteomic Tumor Analysis Consortium (CPTAC)
-
-The current paper/manuscript artifact is available at [`docs/HNSCC_Survival_Paper.pdf`](docs/HNSCC_Survival_Paper.pdf).
+The current manuscript artifact is available at [`docs/HNSCC_Survival_Paper.pdf`](docs/HNSCC_Survival_Paper.pdf).
 
 ## Repository layout
 
@@ -17,64 +12,79 @@ hnscc-survival/
 │   └── HNSCC_Survival_Paper.pdf
 ├── scripts/
 │   ├── analysis/
+│   │   ├── create_supplementary_table.py
+│   │   ├── enrichment_dotplot.py
+│   │   ├── km_curves_rsf.py
+│   │   ├── model_comparison_figure.py
 │   │   └── run_pathway_enrichment.py
 │   ├── data_processing/
 │   │   └── prepare_tcga_cptac_data.Rmd
 │   └── modeling/
+│       ├── check_v7_params.py
 │       └── train_survival_models.py
-├── .gitignore
+├── requirements.txt
 └── README.md
 ```
 
-## File inventory and include/exclude recommendation
+## Data and generated outputs
 
-| File | Include? | Role | Why it matters |
-| --- | --- | --- | --- |
-| `scripts/data_processing/prepare_tcga_cptac_data.Rmd` | **Yes** | Main data-preparation notebook. | This is the script you should be able to discuss in methods: it downloads/loads CPTAC data, prepares TCGA and CPTAC RNA/GISTIC objects, filters to HPV-negative cases with usable survival data, harmonizes shared features, and exports modeling CSVs. |
-| `scripts/modeling/train_survival_models.py` | **Yes** | Main model-training and validation script. | This is the core analysis script: it trains TCGA-discovery models, validates on CPTAC, compares multiple RNA/SCNA inclusion strategies, and saves model-comparison and selected-feature tables. |
-| `scripts/analysis/run_pathway_enrichment.py` | **Yes** | Downstream biological interpretation script. | This turns selected RNA/CNV model features into gene symbols and runs Enrichr pathway/gene-set analyses. |
-| `docs/HNSCC_Survival_Paper.pdf` | **Yes, if allowed by your mentor/project policy** | Manuscript/paper artifact. | Useful for orienting readers and connecting code to the written project narrative. Remove it only if there are sharing/copyright/privacy concerns. |
-| Local raw data, `CPTAC/data/`, `data/`, `results/`, `outputs/` | **No** | Downloaded data and generated outputs. | These can be large, sensitive, or machine-specific. Keep them local or share via an approved data store, not git. |
-| Python/R cache files, editor files | **No** | Local machine artifacts. | These are ignored by `.gitignore` and should not be committed. |
+Raw, intermediate, and generated result files are intentionally not committed. By default, the scripts assume local project folders such as:
 
-## End-to-end workflow
-
-### 1. Prepare harmonized TCGA and CPTAC tables
-
-Run the R Markdown notebook:
-
-```r
-rmarkdown::render("scripts/data_processing/prepare_tcga_cptac_data.Rmd")
+```text
+CPTAC/data/
+results/model_runs/
+results/enrichment/
+results/figures/
+results/tables/
 ```
 
-Expected final modeling inputs:
+Expected harmonized modeling inputs after data preparation are:
 
 ```text
 CPTAC/data/TCGA_Discovery_Harmonized_Full_Data.csv
 CPTAC/data/CPTAC_Validation_Harmonized_Full_Data.csv
 ```
 
-What the notebook does:
+These wide CSVs should contain standardized survival columns (`OS_days`, `OS_event`), clinical columns (`Age`, `Gender`, `Stage`, `T_Stage`, `N_Stage`, `Grade`, `Alcohol_History`, `Pack_Years`), RNA features prefixed with `RNA_`, and copy-number/SCNA features prefixed with `CNV_`.
 
-- loads CPTAC LinkedOmics/freeze files and TCGA processed objects;
-- filters to HPV-negative HNSCC samples with non-missing overall survival time/event fields;
-- creates RNA-seq and GISTIC/SCNA `SummarizedExperiment` objects;
-- restricts features to protein-coding autosomal genes;
-- intersects genes present in both TCGA and CPTAC so discovery and validation features match; and
-- exports wide CSV tables with standardized clinical columns plus `RNA_*` and `CNV_*` feature columns.
+## Environment setup
 
-Important methods points to know:
+### Python
 
-- **Discovery cohort:** TCGA.
-- **Validation cohort:** CPTAC.
-- **Endpoint:** overall survival, represented as `OS_days` and `OS_event`.
-- **Disease subset:** HPV-negative HNSCC.
-- **Feature blocks:** clinical variables, RNA expression features, and CNV/SCNA GISTIC features.
-- **Current limitation:** BMI is intentionally omitted until it can be harmonized across both cohorts.
+Use Python 3.10+ if possible. Create and activate a virtual environment, then install the Python dependencies:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+`scikit-survival` may require platform-specific compiled dependencies. If `pip install scikit-survival` is not supported on your system, install it with conda/mamba instead:
+
+```bash
+mamba create -n hnscc-survival python=3.11 numpy pandas scikit-learn scikit-survival matplotlib lifelines gseapy joblib
+mamba activate hnscc-survival
+```
+
+### R
+
+The data-preparation notebook is an R Markdown workflow. Install the R packages used in `scripts/data_processing/prepare_tcga_cptac_data.Rmd`, including `tidyverse`, `here`, `SummarizedExperiment`, `cBioPortalData`, `curatedTCGAData`, `TCGAbiolinks`, `biomaRt`, `janitor`, and related Bioconductor dependencies.
+
+## Workflow
+
+### 1. Prepare TCGA and CPTAC survival tables
+
+Render the R Markdown notebook from the repository root:
+
+```r
+rmarkdown::render("scripts/data_processing/prepare_tcga_cptac_data.Rmd")
+```
+
+The notebook prepares HPV-negative HNSCC discovery and validation cohorts, aligns clinical and survival variables, restricts omics features to shared genes between TCGA and CPTAC, and writes the two harmonized CSVs under `CPTAC/data/`.
 
 ### 2. Train and compare survival models
 
-After the CSV files exist locally, run:
+Run the main Python modeling script after the harmonized CSVs exist:
 
 ```bash
 python scripts/modeling/train_survival_models.py \
@@ -85,113 +95,80 @@ python scripts/modeling/train_survival_models.py \
   --seed 42
 ```
 
-The script creates a timestamped directory under `results/model_runs/`. It now validates required clinical/survival columns, converts common `OS_event` encodings safely, aligns RNA/CNV feature columns shared by both cohorts, imputes/scales omics blocks using training data only, and always writes a best-model feature table for downstream enrichment. Key outputs include:
+The script writes a timestamped output directory under `results/model_runs/`. Important outputs include:
 
-| Output | Meaning |
+| Output | Description |
 | --- | --- |
-| `all_results.csv` | Model-comparison table sorted by CPTAC test C-index. |
-| `best_model_features.csv` | Clinical/RNA/SCNA feature list for the best qualifying model when success criteria are met. |
-| `selected_rna_features.csv` | RNA features selected for the best model with univariate C-index deviation scores. |
-| `selected_scna_features.csv` | SCNA/CNV features selected for the best model with univariate C-index deviation scores. |
-| `top20_scna_features.csv` | Highest-ranking SCNA features for reference and interpretation. |
+| `all_results.csv` | Model-comparison table sorted by CPTAC validation C-index. |
+| `best_model_features.csv` | Clinical, RNA, and SCNA features from the selected model. |
+| `selected_rna_features.csv` | Selected RNA features and univariate C-index deviation scores. |
+| `selected_scna_features.csv` | Selected copy-number features and univariate C-index deviation scores. |
+| `top20_scna_features.csv` | Highest-ranking SCNA features for interpretation. |
 
-Modeling strategies currently implemented:
+To rerun the manuscript-highlighted block-constrained RSF configuration directly:
 
-1. **Block-constrained feature selection:** forces RNA and SCNA feature blocks to be represented.
-2. **Priority-lasso-style hierarchical fitting:** evaluates clinical → RNA → SCNA blocks.
-3. **Late-fusion ensemble:** trains separate RSF-style components and combines their risk predictions.
-4. **IPF-lasso-style penalty strategy:** encourages SCNA inclusion by changing penalty treatment across blocks.
-5. **Stability-selected multi-block model:** uses bootstrap feature-selection frequency to identify stable RNA and SCNA candidates.
+```bash
+python scripts/modeling/check_v7_params.py \
+  --train-data CPTAC/data/TCGA_Discovery_Harmonized_Full_Data.csv \
+  --test-data CPTAC/data/CPTAC_Validation_Harmonized_Full_Data.csv \
+  --n-rna 70 \
+  --n-scna 4 \
+  --n-jobs 4
+```
 
-The hard success criteria in the script are:
+### 3. Run pathway enrichment
 
-- at least 4 selected SCNA features; and
-- CPTAC test C-index at least `0.6448`, with `0.65` as the aspirational target.
-
-### 3. Run pathway enrichment on selected model genes
-
-Once model outputs exist, run enrichment from the selected-feature table:
+Use the selected model features from a model run:
 
 ```bash
 python scripts/analysis/run_pathway_enrichment.py \
-  --gene-file results/model_runs/<run_directory>/best_model_features.csv \
+  --gene-file results/model_runs/<run_timestamp>/best_model_features.csv \
   --output results/enrichment
 ```
 
-The script extracts gene symbols from `RNA_*`, `CNV_*`, and `SCNA_*` features, records whether each gene came from RNA, SCNA, or both, and runs Enrichr analyses across GO, KEGG, Reactome, Hallmark, WikiPathways, transcription-factor, cell-marker, and disease-oriented libraries. If you do not yet have `best_model_features.csv`, it can also use `--train-data` to create an exploratory high-variance fallback gene list.
+The enrichment script extracts gene symbols from `RNA_`, `CNV_`, and `SCNA_` feature names, runs Enrichr libraries through `gseapy`, and writes timestamped enrichment tables, plots, and a summary report.
 
-Key enrichment outputs include:
+### 4. Generate figures and tables
 
-| Output | Meaning |
-| --- | --- |
-| `input_genes.csv` | Gene list and source modality (`RNA`, `SCNA`, or both). |
-| `*_results.csv` | Full Enrichr results for each library. |
-| `*_barplot.png` | Top-term barplots when plotting dependencies are available. |
-| `enrichment_summary_report.txt` | Human-readable pathway-enrichment summary. |
-| `all_results_combined.csv` | Combined enrichment results across libraries. |
-| `significant_terms_combined.csv` or `suggestive_terms_combined.csv` | Significant or relaxed-threshold combined terms, depending on results. |
+Create an ECM/protease-focused dot plot from enrichment result tables:
 
-## Dependencies
+```bash
+python scripts/analysis/enrichment_dotplot.py \
+  --input-dir results/enrichment/<run_timestamp> \
+  --output results/figures/enrichment_dotplot.png
+```
 
-The project uses both R and Python.
+Create a performance comparison plot from the modeling output:
 
-### R packages used by data preparation
+```bash
+python scripts/analysis/model_comparison_figure.py \
+  --results-csv results/model_runs/<run_timestamp>/all_results.csv \
+  --output results/figures/model_comparison.png
+```
 
-- `tidyverse`
-- `data.table`
-- `janitor`
-- `here`
-- `SummarizedExperiment`
-- `TCGAbiolinks`
-- `Biobase`
-- `S4Vectors`
-- `matrixStats`
-- `org.Hs.eg.db`
-- `AnnotationDbi`
-- `testthat` through explicit `testthat::expect_equal()` calls
+Create Kaplan-Meier curves for RSF validation-cohort risk groups:
 
-### Python packages used by modeling/enrichment
+```bash
+python scripts/analysis/km_curves_rsf.py \
+  --train-data CPTAC/data/TCGA_Discovery_Harmonized_Full_Data.csv \
+  --test-data CPTAC/data/CPTAC_Validation_Harmonized_Full_Data.csv \
+  --output results/figures/km_curves_rsf.png \
+  --n-rna 70 \
+  --n-scna 4 \
+  --n-jobs 4
+```
 
-- `numpy`
-- `pandas`
-- `scikit-learn`
-- `scikit-survival`
-- `gseapy` for Enrichr enrichment
-- `matplotlib` for enrichment plots
+Create a supplementary feature table from model-selected features:
 
-A future improvement would be to add a pinned `environment.yml` or `requirements.txt`, but this commit intentionally avoids creating new files beyond the existing repository files.
+```bash
+python scripts/analysis/create_supplementary_table.py \
+  --features results/model_runs/<run_timestamp>/best_model_features.csv \
+  --output results/tables/supplementary_model_features.csv
+```
 
-## What to say if asked to explain the project
+## Reproducibility notes
 
-A concise explanation:
-
-> This project builds a survival-prediction workflow for HPV-negative HNSCC. TCGA is used as the discovery/training cohort and CPTAC is used as an external validation cohort. The data-processing notebook harmonizes clinical survival fields and matched RNA/CNV gene features across cohorts. The modeling script compares several multi-omic survival-model strategies that force or encourage SCNA inclusion, then evaluates them by C-index on CPTAC. The enrichment script interprets the model-selected genes using pathway and gene-set enrichment.
-
-## Refactoring performed
-
-The current refactor did not split scripts into additional files. It only renamed and clarified existing files:
-
-| Previous name | Current name | Reason |
-| --- | --- | --- |
-| `00_CPTAC_and_TCGA_data_processing.Rmd` | `scripts/data_processing/prepare_tcga_cptac_data.Rmd` | Describes the actual action: prepare harmonized TCGA/CPTAC modeling data. |
-| `optimized_survival_v7.py` | `scripts/modeling/train_survival_models.py` | Describes the script as the main model-training entry point rather than a historical version. |
-| `pathway_enrichment_v7.py` | `scripts/analysis/run_pathway_enrichment.py` | Describes the script as the pathway-enrichment entry point rather than a historical version. |
-| `HNSCC_Survival_Paper.pdf` | `docs/HNSCC_Survival_Paper.pdf` | Keeps manuscript material separate from runnable code. |
-
-The earlier separate `REFACTOR_PLAN.md` was removed because this README is now the single project guide.
-
-## Notes about mentor-repository files
-
-The files currently present here are sufficient for the visible workflow above. If additional mentor scripts are later added, include them only if they serve one of these reproducibility purposes:
-
-- regenerate a manuscript figure;
-- regenerate a supplementary table;
-- reproduce final model parameters;
-- create Kaplan-Meier/risk-group plots used in the paper or presentation; or
-- perform a documented sensitivity/model-comparison analysis.
-
-Do not include one-off scratch scripts unless their logic is folded into the main data, modeling, or analysis scripts.
-
-## Data and output policy
-
-Do not commit raw downloaded data, generated model outputs, generated figures, or local cache files. The `.gitignore` excludes common local folders such as `CPTAC/data/`, `data/`, `outputs/`, and `results/`.
+- The intended training/validation design is TCGA discovery followed by CPTAC validation.
+- Overall survival is represented by `OS_days` and `OS_event`.
+- The current feature blocks are clinical variables, RNA expression features, and SCNA/CNV features.
+- BMI is not included in the current harmonized inputs because it must be consistently available in both cohorts before modeling.
