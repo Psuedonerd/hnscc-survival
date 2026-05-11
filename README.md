@@ -87,7 +87,7 @@ The notebook prepares HPV-negative HNSCC discovery and validation cohorts, align
 Run the main Python modeling script after the harmonized CSVs exist:
 
 ```bash
-python scripts/modeling/train_survival_models.py \
+python scripts/training/train_survival_models.py \
   --train-data CPTAC/data/TCGA_Discovery_Harmonized_Full_Data.csv \
   --test-data CPTAC/data/CPTAC_Validation_Harmonized_Full_Data.csv \
   --output results/model_runs \
@@ -108,7 +108,7 @@ The script writes a timestamped output directory under `results/model_runs/`. Im
 To rerun the manuscript-highlighted block-constrained RSF configuration directly:
 
 ```bash
-python scripts/modeling/check_v7_params.py \
+python scripts/training/check_v7_params.py \
   --train-data CPTAC/data/TCGA_Discovery_Harmonized_Full_Data.csv \
   --test-data CPTAC/data/CPTAC_Validation_Harmonized_Full_Data.csv \
   --n-rna 70 \
