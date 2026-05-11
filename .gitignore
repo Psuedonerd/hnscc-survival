@@ -1,11 +1,25 @@
-# Data
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# R / RStudio
+.Rhistory
+.RData
+.Rproj.user/
+*.html
+
+# Local data and generated outputs
 *.csv
 *.tsv
+CPTAC/data/
+data/
+outputs/
+results/
+figures/generated/
 
-# Python
-venv/
-__pycache__/
-*.pyc
-
-# OS
+# OS/editor files
 .DS_Store
+.vscode/
+.idea/
