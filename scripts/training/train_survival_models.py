@@ -2,21 +2,21 @@
 """
 Train and evaluate HNSCC survival models: TCGA discovery (training) → CPTAC validation (assessment of performance).
 
-Multi-Omics Integration with SCNA Inclusion -- Potential Strategies:
+Strategies for feature selection (involving both RNA and SCNA features):
 
-1. BLOCK-CONSTRAINED FEATURE SELECTION: Force top N RNA + top M SCNA (min M=4)
+1. Block-Constrained Univariate Feature Selection: Force top N RNA + top M SCNA (min M=4)
    Uses univariate C-index ranking for the RNA and SCNA features to assess which ones are associated with survival
 
-2. PRIORITY-LASSO: Hierarchical fitting that preserves block contributions
+2. Priority-Lasso: Hierarchical fitting that preserves block contributions
    Clinical → RNA → SCNA, each block explains residual variance; We use this order due to the high predictive value of clinical and RNA features
 
-3. LATE FUSION ENSEMBLE: Separate models combined
+3. Late Fusion Ensemble: Separate models combined
    An RSF_RNA model and RSF_SCNA model are trained on their respective data types. Their predictions are combined via weighted averaging
 
-4. IPF-LASSO STYLE: Different regularization per block
+4. IPF-Lasso Style: Different regularization per block
    Lower relative penalty on SCNA to encourage inclusion
 
-5. STABILITY-SELECTED MULTI-BLOCK: Bootstrap selection on each block
+5. Stability Selection: Bootstrap selection on each block
    Performs a variety of boostraps on subsets of both the RNA and SCNA datasets. Features stable in >50% of bootstraps from both RNA and SCNA are kept 
 
 Inputs:
@@ -29,17 +29,30 @@ Outputs:
     selected_scna_features.csv, and top20_scna_features.csv.
 
 Example Run:
-    python scripts/modeling/train_survival_models.py \
-        --train-data CPTAC/data/TCGA_Discovery_Harmonized_Full_Data.csv \
-        --test-data CPTAC/data/CPTAC_Validation_Harmonized_Full_Data.csv \
-        --output results/model_runs
+    python scripts/training/train_survival_models.py \
+        --train-data real_data/TCGA_Discovery_Harmonized_Full_Data.csv \
+        --test-data real_data/CPTAC_Validation_Harmonized_Full_Data.csv \
+        --output results/model_runs \
+        --mode block \
+        --n-jobs 1 \
+        --seed 42
 """
 
+# Import Dependencies, Install anything not present
 import argparse
-import importlib
 import os
+import numpy as np
+import pandas as pd
 import warnings
 from datetime import datetime
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import StratifiedKFold
+from sksurv.linear_model import CoxnetSurvivalAnalysis
+from sksurv.ensemble import RandomSurvivalForest, GradientBoostingSurvivalAnalysis
+from sksurv.metrics import concordance_index_censored
+import importlib
+
+
 
 np = None
 pd = None
@@ -77,14 +90,22 @@ def parse_args():
     parser.add_argument("--train-data", required=True, help="Harmonized TCGA discovery CSV")
     parser.add_argument("--test-data", required=True, help="Harmonized CPTAC validation CSV")
     parser.add_argument("--output", required=True, help="Parent output directory")
-    parser.add_argument("--n-jobs", type=int, default=4, help="Parallel jobs for RSF models")
+    parser.add_argument("--n-jobs", type=int, default=1, help="Parallel jobs for RSF models")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument(
+        "--mode",
+        choices=["block", "extended", "full"],
+        default="block",
+        help=(
+            "Model set to run. `block` runs the fast block-constrained RSF sweep; "
+            "`extended` also runs priority-lasso, late-fusion, and IPF-style models; "
+            "`full` additionally runs slow bootstrap stability selection."
+        ),
+    )
     return parser.parse_args()
 
 
-# =============================================================================
-# INPUT VALIDATION AND PREPROCESSING HELPERS
-# =============================================================================
+# Preprocessing and Input Validation Helpers
 
 
 def ensure_columns(df, required_cols, label):
@@ -128,14 +149,25 @@ def common_omic_columns(train_df, test_df, prefix):
 
 def impute_and_scale_block(train_df, test_df, cols, label):
     """Numeric coercion, train-median imputation, and standard scaling for one feature block."""
-    X_train = train_df[cols].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
-    X_test = test_df[cols].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+    if not cols:
+        raise ValueError(f"No columns supplied for {label} feature block")
+
+    X_train = train_df[cols].apply(pd.to_numeric, errors="coerce").to_numpy(
+        dtype=float,
+        copy=True,
+    )
+    X_test = test_df[cols].apply(pd.to_numeric, errors="coerce").to_numpy(
+        dtype=float,
+        copy=True,
+    )
     col_means = np.nanmean(X_train, axis=0)
     col_means = np.where(np.isnan(col_means), 0, col_means)
-    train_missing = np.where(np.isnan(X_train))
-    test_missing = np.where(np.isnan(X_test))
-    X_train[train_missing] = np.take(col_means, train_missing[1])
-    X_test[test_missing] = np.take(col_means, test_missing[1])
+    train_missing = np.isnan(X_train)
+    test_missing = np.isnan(X_test)
+    if train_missing.any():
+        X_train[train_missing] = np.take(col_means, np.where(train_missing)[1])
+    if test_missing.any():
+        X_test[test_missing] = np.take(col_means, np.where(test_missing)[1])
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
@@ -151,7 +183,7 @@ def top_feature_indices(scores, requested_n):
     return np.argsort(scores)[-requested_n:][::-1]
 
 
-# CLINICAL HARMONIZATION
+# Clinical Harmonization
 
 def harmonize_clinical_data(train_df, test_df):
     """Apply all harmonization steps"""
@@ -302,7 +334,7 @@ def univariate_cindex_scores(X, y):
     return scores
 
 
-# STABILITY SELECTION (Per-Block)
+# Stability Selection (Per-Block)
 
 
 def stability_selection_per_block(X, y, n_bootstrap=100, top_k=50, seed=42):
@@ -342,7 +374,7 @@ def stability_selection_per_block(X, y, n_bootstrap=100, top_k=50, seed=42):
     return selection_counts / n_bootstrap
 
 
-# RSF TUNING WITH AGGRESSIVE REGULARIZATION
+# Hyperparameter Tuning for the RandomSurvivalForests Model (Aggressive)
 
 
 def tune_rsf_aggressive(X_train, y_train, n_jobs=4, seed=42):
@@ -402,7 +434,119 @@ def tune_rsf_aggressive(X_train, y_train, n_jobs=4, seed=42):
     return best_model, best_params
 
 
-# MAIN
+def write_model_outputs(
+    output_dir,
+    results,
+    all_models,
+    clin_names,
+    rna_cols,
+    cnv_cols,
+    rna_scores,
+    cnv_scores,
+    cnv_stability=None,
+):
+    """Write model summary and feature tables for completed experiments."""
+    print("\n" + "=" * 70)
+    print("FINAL RESULTS")
+    print("=" * 70)
+
+    results_df = pd.DataFrame(results)
+    if results_df.empty:
+        print("No models completed successfully; writing empty results table.")
+        results_df.to_csv(os.path.join(output_dir, "all_results.csv"), index=False)
+        return
+
+    results_df = results_df.sort_values("Test_C", ascending=False)
+    print("\n--- ALL RESULTS (sorted by Test C-index) ---")
+    print(results_df.to_string(index=False))
+
+    print("\n" + "-" * 50)
+    print("PROMISING MODELS:")
+    print("  (>= 4 SCNA features AND Test C-index >= 0.6448)")
+    print("-" * 50)
+
+    qualifying_models = results_df[
+        (results_df["N_SCNA"] >= 4) & (results_df["Test_C"] >= 0.6448)
+    ]
+
+    if len(qualifying_models) > 0:
+        print(qualifying_models.to_string(index=False))
+        best = qualifying_models.iloc[0]
+        print(f"\nBEST MODEL: {best['Experiment']} ({best['Config']})")
+        print(f"   Test C-index: {best['Test_C']:.4f}")
+        print(
+            f"   Features: {best['N_Clinical']} clinical + "
+            f"{best['N_RNA']} RNA + {best['N_SCNA']} SCNA"
+        )
+    else:
+        print("\nNo models met both criteria (>=4 SCNA and >=0.6448 C-index)")
+        best = results_df.iloc[0]
+        print(
+            f"   Best overall: {best['Experiment']} ({best['Config']}): "
+            f"Test C = {best['Test_C']:.4f}, {best['N_SCNA']} SCNA"
+        )
+
+    results_df.to_csv(os.path.join(output_dir, "all_results.csv"), index=False)
+    selected_summary_row = qualifying_models.iloc[0] if len(qualifying_models) > 0 else results_df.iloc[0]
+
+    def infer_model_key(row):
+        experiment = row["Experiment"]
+        config = row["Config"]
+        if experiment == "Block_Constrained":
+            return f"Block_{config}"
+        if experiment == "Priority_Lasso":
+            return f"PriorityLasso_{config}"
+        if experiment == "Late_Fusion":
+            return f"LateFusion_alpha{str(config).split('alpha')[-1]}"
+        if experiment == "IPF_Style":
+            return f"IPF_boost{str(config).split('boost')[-1]}"
+        if experiment == "Stability_MultiBlock":
+            return "Stability_MultiBlock"
+        return None
+
+    best_key = infer_model_key(selected_summary_row)
+    if best_key not in all_models:
+        print(f"Warning: could not find stored model for feature export: {best_key}")
+    else:
+        best_model_info = all_models[best_key]
+        feature_df = pd.DataFrame({
+            "feature": best_model_info["features"],
+            "type": ["clinical"] * len(clin_names)
+                    + ["RNA"] * len(best_model_info["rna_features"])
+                    + ["SCNA"] * len(best_model_info["scna_features"]),
+        })
+        feature_df.to_csv(os.path.join(output_dir, "best_model_features.csv"), index=False)
+
+        rna_feature_df = pd.DataFrame({
+            "feature": best_model_info["rna_features"],
+            "cindex_deviation": [rna_scores[rna_cols.index(f)] for f in best_model_info["rna_features"]],
+        }).sort_values("cindex_deviation", ascending=False)
+        rna_feature_df.to_csv(os.path.join(output_dir, "selected_rna_features.csv"), index=False)
+
+        scna_feature_df = pd.DataFrame({
+            "feature": best_model_info["scna_features"],
+            "cindex_deviation": [cnv_scores[cnv_cols.index(f)] for f in best_model_info["scna_features"]],
+        }).sort_values("cindex_deviation", ascending=False)
+        scna_feature_df.to_csv(os.path.join(output_dir, "selected_scna_features.csv"), index=False)
+
+        print(f"\nFeature lists saved to: {output_dir}")
+
+    top_scna_indices = top_feature_indices(cnv_scores, 20)
+    if cnv_stability is None:
+        stability_values = [np.nan] * len(top_scna_indices)
+    else:
+        stability_values = [cnv_stability[i] for i in top_scna_indices]
+    top_scna_df = pd.DataFrame({
+        "feature": [cnv_cols[i] for i in top_scna_indices],
+        "cindex_deviation": [cnv_scores[i] for i in top_scna_indices],
+        "stability": stability_values,
+    })
+    top_scna_df.to_csv(os.path.join(output_dir, "top20_scna_features.csv"), index=False)
+
+    print(f"\nResults saved to: {output_dir}")
+
+
+# Main
 
 def main():
     args = parse_args()
@@ -414,19 +558,20 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
 
     print("=" * 70)
-    print("SURVIVAL PREDICTION: Multi-Omics with Guaranteed SCNA Inclusion")
+    print("Head and Neck Squamous Cell Carcinoma Survival Prediction with RNA and SCNA Features")
     print("=" * 70)
     print(f"Output: {output_dir}")
-    print("\n5 EXPERIMENTAL APPROACHES:")
+    print(f"Mode: {args.mode}")
+    print("\n5 Potential Feature Selection Methods:")
     print("  1. Block-Constrained Feature Selection (RNA + SCNA)")
     print("  2. Priority-Lasso (Hierarchical)")
     print("  3. Late Fusion Ensemble (RSF_RNA + RSF_SCNA)")
     print("  4. IPF-LASSO Style (Different penalties)")
-    print("  5. Stability-Selected Multi-Block")
+    print("  5. Stability-Selected Multi-Block (only with --mode full)")
 
     # Load Data
     print("\n" + "=" * 70)
-    print("LOADING DATA")
+    print("Loading Data")
     print("=" * 70)
 
     train_df = pd.read_csv(args.train_data)
@@ -466,7 +611,7 @@ def main():
 
     # Prepare Features
     print("\n" + "=" * 70)
-    print("PREPARING FEATURES")
+    print("Preparing Features")
     print("=" * 70)
 
     clinical_cols = [
@@ -510,9 +655,9 @@ def main():
     results = []
     all_models = {}
 
-    # EXPERIMENT 1: Block-Constrained Feature Selection
+    # Experiment 1: Block-Constrained Feature Selection
     print("\n" + "=" * 70)
-    print("EXPERIMENT 1: Block-Constrained Feature Selection")
+    print("Experiment 1: Block-Constrained Feature Selection")
     print("=" * 70)
     print("  Strategy: Force top N RNA + top M SCNA (minimum M=4)")
 
@@ -522,7 +667,7 @@ def main():
         (65, 6),   # 65 RNA + 6 SCNA = 71 omics features
         (60, 8),   # 60 RNA + 8 SCNA = 68 omics features
         (55, 10),  # 55 RNA + 10 SCNA = 65 omics features
-        (75, 4),   # Match v6 RNA count + minimum SCNA
+        (75, 4),   # 79 omics features
         (70, 6),   # Balanced
         (65, 8),   # More SCNA weight
     ]
@@ -588,10 +733,24 @@ def main():
             "scna_features": selected_cnv,
         }
 
-    # EXPERIMENT 2: Priority-Lasso (Hierarchical)
+    if args.mode == "block":
+        print("\nSkipping extended experiments; use --mode extended or --mode full to run them.")
+        write_model_outputs(
+            output_dir,
+            results,
+            all_models,
+            clin_names,
+            rna_cols,
+            cnv_cols,
+            rna_scores,
+            cnv_scores,
+        )
+        return
+
+    # Experiment 2: Priority-Lasso (Hierarchical)
    
     print("\n" + "=" * 70)
-    print("EXPERIMENT 2: Priority-Lasso (Hierarchical Fitting)")
+    print("Experiment 2: Priority-Lasso (Hierarchical Fitting)")
     print("=" * 70)
     print("  Strategy: Clinical → RNA → SCNA (each subsequent one explains the residual variance from the clinical predictions)")
 
@@ -698,9 +857,9 @@ def main():
         except Exception as e:
             print(f"    Full model failed with SCNA{n_scna_priority}: {e}")
 
-    # EXPERIMENT 3: Late Fusion Ensemble
+    # Experiment 3: Late Fusion Ensemble
     print("\n" + "=" * 70)
-    print("EXPERIMENT 3: Late Fusion Ensemble")
+    print("Experiment 3: Late Fusion Ensemble")
     print("=" * 70)
     print("  Strategy: Separate RSF_RNA + RSF_SCNA, weighted ensemble")
 
@@ -812,9 +971,9 @@ def main():
         "alpha": best_alpha,
     }
 
-    # EXPERIMENT 4: IPF-LASSO Style (Different Penalties)
+    # Experiment 4: IPF-LASSO Style (Different Penalties)
     print("\n" + "=" * 70)
-    print("EXPERIMENT 4: IPF-LASSO Style (Different Regularization per Block)")
+    print("Experiment 4: IPF-LASSO Style (Different Regularization per Block)")
     print("=" * 70)
     print("  Strategy: Lower penalty on SCNA to encourage inclusion")
 
@@ -876,9 +1035,23 @@ def main():
                 "scna_features": selected_cnv_ipf,
             }
 
-    # EXPERIMENT 5: Stability-Selected Multi-Block
+    if args.mode == "extended":
+        print("\nSkipping bootstrap stability selection; use --mode full to run it.")
+        write_model_outputs(
+            output_dir,
+            results,
+            all_models,
+            clin_names,
+            rna_cols,
+            cnv_cols,
+            rna_scores,
+            cnv_scores,
+        )
+        return
+
+    # Experiment 5: Stability-Selected Multi-Block
     print("\n" + "=" * 70)
-    print("EXPERIMENT 5: Stability-Selected Multi-Block")
+    print("Experiment 5: Stability-Selected Multi-Block")
     print("=" * 70)
     print("  Strategy: Bootstrap selection on RNA and SCNA separately")
 
@@ -968,7 +1141,7 @@ def main():
 
     # Find best model meeting both criteria
     print("\n" + "-" * 50)
-    print("PROMISING MODELS:")
+    print("Promising Models are defined as:")
     print("  (Test C-index >= 0.65)")
     print("-" * 50)
 
@@ -984,12 +1157,12 @@ def main():
         print(f"   Features: {best['N_Clinical']} clinical + {best['N_RNA']} RNA + {best['N_SCNA']} SCNA")
 
         if best["Test_C"] >= 0.65:
-            print("\n✅ TARGET ACHIEVED! Test C-index >= 0.65")
+            print("\nTarget Achieved! Test C-index >= 0.65")
         else:
             gap = 0.65 - best["Test_C"]
-            print(f"\n⚠️  Gap to 0.65 target: {gap:.4f}")
+            print(f"\n Gap to 0.65 target: {gap:.4f}")
     else:
-        print("\n❌ No models met both criteria (>=4 SCNA and >=0.6448 C-index)")
+        print("\nNo models met both criteria (>=4 SCNA and >=0.6448 C-index)")
         print("   Best overall model:")
         best = results_df.iloc[0]
         print(f"   {best['Experiment']} ({best['Config']}): Test C = {best['Test_C']:.4f}, {best['N_SCNA']} SCNA")
