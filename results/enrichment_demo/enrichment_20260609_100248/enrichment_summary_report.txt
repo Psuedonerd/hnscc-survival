@@ -1,0 +1,175 @@
+======================================================================
+PATHWAY ENRICHMENT ANALYSIS REPORT
+HNSCC Prognostic Multi-Omics Gene Signature
+======================================================================
+
+Analysis Date: 2026-06-09 10:02:55
+Number of input genes: 60
+  - From RNA expression: 60
+  - From SCNA/copy number: 8
+  - Present in both modalities: 8
+
+Input Genes:
+----------------------------------------
+  AAA67[RNA], AAA6[RNA+SCNA], AAA65[RNA], AAA38[RNA], AAA43[RNA]
+  AAA72[RNA], AAA8[RNA], AAA59[RNA], AAA12[RNA], AAA70[RNA]
+  AAA73[RNA], AAA2[RNA+SCNA], AAA27[RNA], AAA46[RNA], AAA60[RNA]
+  AAA48[RNA], AAA49[RNA], AAA19[RNA], AAA34[RNA], AAA31[RNA]
+  AAA54[RNA], AAA5[RNA+SCNA], AAA7[RNA+SCNA], AAA78[RNA], AAA28[RNA]
+  AAA30[RNA], AAA40[RNA], AAA41[RNA], AAA4[RNA+SCNA], AAA53[RNA]
+  AAA9[RNA+SCNA], AAA23[RNA], AAA13[RNA], AAA52[RNA], AAA10[RNA]
+  AAA18[RNA], AAA35[RNA], AAA50[RNA], AAA21[RNA], AAA62[RNA]
+  AAA1[RNA+SCNA], AAA39[RNA], AAA3[RNA+SCNA], AAA22[RNA], AAA64[RNA]
+  AAA61[RNA], AAA57[RNA], AAA36[RNA], AAA29[RNA], AAA47[RNA]
+  AAA16[RNA], AAA75[RNA], AAA14[RNA], AAA66[RNA], AAA11[RNA]
+  AAA71[RNA], AAA32[RNA], AAA55[RNA], AAA74[RNA], AAA76[RNA]
+
+======================================================================
+Analysis: GO Biological Process
+======================================================================
+  No results returned.
+
+======================================================================
+Analysis: GO Molecular Function
+======================================================================
+  No results returned.
+
+======================================================================
+Analysis: GO Cellular Component
+======================================================================
+  No results returned.
+
+======================================================================
+Analysis: KEGG Pathways
+======================================================================
+  No results returned.
+
+======================================================================
+Analysis: Reactome Pathways
+======================================================================
+  No results returned.
+
+======================================================================
+Analysis: MSigDB Hallmark
+======================================================================
+  No results returned.
+
+======================================================================
+Analysis: WikiPathways
+======================================================================
+  No results returned.
+
+======================================================================
+Analysis: ENCODE TF ChIP-seq
+======================================================================
+  Total terms tested: 27
+  Significant (adj. p < 0.05): 0
+  Suggestive (adj. p < 0.25): 0
+
+  Top 10 Enriched Terms:
+  ------------------------------------------------------------
+    FOXM1 ECC-1 hg19 
+      adj.p: 1.00e+00, Overlap: 1/578
+    HNF4G HepG2 hg19 
+      adj.p: 1.00e+00, Overlap: 1/605
+    ESR1 ECC-1 hg19 
+      adj.p: 1.00e+00, Overlap: 1/637
+    CEBPB ECC-1 hg19 
+      adj.p: 1.00e+00, Overlap: 1/1273
+    MYBL2 HepG2 hg19 
+      adj.p: 1.00e+00, Overlap: 1/1595
+    MBD4 HepG2 hg19 
+      adj.p: 1.00e+00, Overlap: 1/1809
+    RAD21 HCT116 hg19 
+      adj.p: 1.00e+00, Overlap: 1/1973
+    EZH2 myotube hg19 
+      adj.p: 1.00e+00, Overlap: 1/2000
+    SMC3 HepG2 hg19 
+      adj.p: 1.00e+00, Overlap: 1/2000
+    MAFF HepG2 hg19 
+      adj.p: 1.00e+00, Overlap: 1/2000
+
+======================================================================
+Analysis: ChEA TF Targets
+======================================================================
+  No results returned.
+
+======================================================================
+Analysis: Human Gene Atlas
+======================================================================
+  No results returned.
+
+======================================================================
+Analysis: CellMarker
+======================================================================
+  No results returned.
+
+======================================================================
+Analysis: PanglaoDB
+======================================================================
+  No results returned.
+
+======================================================================
+Analysis: Cancer Cell Line Encyclopedia
+======================================================================
+  Total terms tested: 10
+  Significant (adj. p < 0.05): 0
+  Suggestive (adj. p < 0.25): 0
+
+  Top 10 Enriched Terms:
+  ------------------------------------------------------------
+    SNU175 LARGE INTESTINE 
+      adj.p: 6.91e-01, Overlap: 1/153
+    SNU245 BILIARY TRACT 
+      adj.p: 6.91e-01, Overlap: 1/164
+    DV90 LUNG 
+      adj.p: 6.91e-01, Overlap: 1/206
+    COLO205 LARGE INTESTINE 
+      adj.p: 6.91e-01, Overlap: 1/232
+    HCC2218 BREAST 
+      adj.p: 6.91e-01, Overlap: 1/245
+    HH HAEMATOPOIETIC AND LYMPHOID TISSUE 
+      adj.p: 6.91e-01, Overlap: 1/263
+    EHEB HAEMATOPOIETIC AND LYMPHOID TISSUE 
+      adj.p: 6.91e-01, Overlap: 1/367
+    L1236 HAEMATOPOIETIC AND LYMPHOID TISSUE 
+      adj.p: 6.91e-01, Overlap: 1/368
+    JVM2 HAEMATOPOIETIC AND LYMPHOID TISSUE 
+      adj.p: 6.91e-01, Overlap: 1/374
+    C3A LIVER 
+      adj.p: 6.91e-01, Overlap: 1/387
+
+======================================================================
+Analysis: OMIM Disease
+======================================================================
+  No results returned.
+
+======================================================================
+Analysis: DisGeNET
+======================================================================
+  Total terms tested: 26
+  Significant (adj. p < 0.05): 0
+  Suggestive (adj. p < 0.25): 0
+
+  Top 10 Enriched Terms:
+  ------------------------------------------------------------
+    Early onset torsion dystonia 
+      adj.p: 8.85e-01, Overlap: 1/22
+    Henoch-Schoenlein Purpura 
+      adj.p: 8.85e-01, Overlap: 1/98
+    Osteitis Deformans 
+      adj.p: 8.85e-01, Overlap: 1/79
+    Aortic Aneurysm 
+      adj.p: 8.85e-01, Overlap: 1/96
+    Dystonia Disorders 
+      adj.p: 8.85e-01, Overlap: 1/135
+    Moyamoya disease 1 
+      adj.p: 8.85e-01, Overlap: 1/46
+    Peripheral Arterial Diseases 
+      adj.p: 8.85e-01, Overlap: 1/125
+    Spastic Paraplegia, Hereditary 
+      adj.p: 8.85e-01, Overlap: 1/126
+    Hamartoma Syndrome, Multiple 
+      adj.p: 8.85e-01, Overlap: 1/138
+    Aortic Aneurysm, Thoracic 
+      adj.p: 8.85e-01, Overlap: 1/99
