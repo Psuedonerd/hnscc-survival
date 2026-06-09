@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create an ECM/protease-focused dot plot from Enrichr result CSV files."""
+"""Generates a dotplot depicting enrichment based on the enrichment analysis."""
 
 import argparse
 import os
