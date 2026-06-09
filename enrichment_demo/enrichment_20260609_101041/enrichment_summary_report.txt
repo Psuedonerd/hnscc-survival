@@ -1,0 +1,373 @@
+======================================================================
+PATHWAY ENRICHMENT ANALYSIS REPORT
+HNSCC Prognostic Multi-Omics Gene Signature
+======================================================================
+
+Analysis Date: 2026-06-09 10:10:48
+Number of input genes: 68
+  - From RNA expression: 60
+  - From SCNA/copy number: 8
+  - Present in both modalities: 0
+
+Input Genes:
+----------------------------------------
+  SPINK6[RNA], ACTC1[RNA], ANKRD1[RNA], ASB5[RNA], SLN[RNA]
+  BPIFA1[RNA], MYBPH[RNA], CACNA1S[RNA], MYL2[RNA], NEFM[RNA]
+  STATH[RNA], MYL1[RNA], MYOG[RNA], SCGB3A1[RNA], CHRND[RNA]
+  MYF6[RNA], SMYD1[RNA], ACTA1[RNA], KLHL41[RNA], LMOD2[RNA]
+  SLC34A2[RNA], GSTM1[RNA], XIRP2[RNA], RPTN[RNA], KRT24[RNA]
+  TRDN[RNA], MYBPC2[RNA], SPINK7[RNA], MYH1[RNA], SPRR2B[RNA]
+  CSRP3[RNA], ACTN2[RNA], DES[RNA], TNNC1[RNA], NRAP[RNA]
+  UPK1B[RNA], CKM[RNA], TCAP[RNA], MUC5B[RNA], C10orf71[RNA]
+  MYH2[RNA], FDCSP[RNA], BPIFB1[RNA], PRAME[RNA], SPRR2F[RNA]
+  TMPRSS11B[RNA], HORMAD1[RNA], LTF[RNA], SPRR3[RNA], UGT1A7[RNA]
+  MYH7[RNA], MYH8[RNA], NTS[RNA], FLG2[RNA], MYBPC1[RNA]
+  SPRR2G[RNA], PIGR[RNA], ADH7[RNA], KRT2[RNA], LCE3D[RNA]
+  PPFIA1[SCNA], SHANK2[SCNA], FGF4[SCNA], FGF3[SCNA], CCND1[SCNA]
+  ANO1[SCNA], FADD[SCNA], CTTN[SCNA]
+
+======================================================================
+Analysis: GO Biological Process
+======================================================================
+  Total terms tested: 493
+  Significant (adj. p < 0.05): 66
+  Suggestive (adj. p < 0.25): 349
+
+  Top 10 Enriched Terms:
+  ------------------------------------------------------------
+    Muscle Contraction (GO:0006936) ***
+      adj.p: 8.20e-12, Overlap: 11/94
+    Myofibril Assembly (GO:0030239) ***
+      adj.p: 6.77e-10, Overlap: 8/46
+    Heart Contraction (GO:0060047) ***
+      adj.p: 1.29e-08, Overlap: 7/41
+    Striated Muscle Contraction (GO:0006941) ***
+      adj.p: 1.09e-07, Overlap: 7/57
+    Actomyosin Structure Organization (GO:0031032) ***
+      adj.p: 7.51e-07, Overlap: 7/77
+    Sarcomere Organization (GO:0045214) ***
+      adj.p: 3.58e-06, Overlap: 5/29
+    Actin-Myosin Filament Sliding (GO:0033275) ***
+      adj.p: 3.82e-06, Overlap: 4/12
+    Cardiac Muscle Tissue Morphogenesis (GO:0055008) ***
+      adj.p: 3.82e-06, Overlap: 5/31
+    Cardiac Muscle Contraction (GO:0060048) ***
+      adj.p: 4.72e-06, Overlap: 5/33
+    Cardiac Myofibril Assembly (GO:0055003) ***
+      adj.p: 7.99e-06, Overlap: 4/15
+
+======================================================================
+Analysis: GO Molecular Function
+======================================================================
+  No results returned.
+
+======================================================================
+Analysis: GO Cellular Component
+======================================================================
+  Total terms tested: 82
+  Significant (adj. p < 0.05): 15
+  Suggestive (adj. p < 0.25): 29
+
+  Top 10 Enriched Terms:
+  ------------------------------------------------------------
+    Myofibril (GO:0030016) ***
+      adj.p: 4.61e-10, Overlap: 7/29
+    Cornified Envelope (GO:0001533) ***
+      adj.p: 3.22e-09, Overlap: 7/41
+    Muscle Myosin Complex (GO:0005859) ***
+      adj.p: 3.26e-06, Overlap: 4/14
+    Myosin Filament (GO:0032982) ***
+      adj.p: 3.32e-06, Overlap: 4/15
+    Actin Filament (GO:0005884) ***
+      adj.p: 7.02e-05, Overlap: 5/71
+    Supramolecular Fiber (GO:0099512) ***
+      adj.p: 9.06e-05, Overlap: 4/36
+    Polymeric Cytoskeletal Fiber (GO:0099513) ***
+      adj.p: 3.78e-04, Overlap: 7/265
+    Sarcoplasmic Reticulum Membrane (GO:0033017) ***
+      adj.p: 1.06e-03, Overlap: 3/27
+    Sarcoplasmic Reticulum (GO:0016529) ***
+      adj.p: 4.39e-03, Overlap: 3/45
+    Actin Cytoskeleton (GO:0015629) ***
+      adj.p: 6.99e-03, Overlap: 6/327
+
+======================================================================
+Analysis: KEGG Pathways
+======================================================================
+  Total terms tested: 116
+  Significant (adj. p < 0.05): 9
+  Suggestive (adj. p < 0.25): 19
+
+  Top 10 Enriched Terms:
+  ------------------------------------------------------------
+    Cardiac muscle contraction ***
+      adj.p: 3.48e-05, Overlap: 6/87
+    Hypertrophic cardiomyopathy ***
+      adj.p: 3.48e-05, Overlap: 6/90
+    Dilated cardiomyopathy ***
+      adj.p: 3.48e-05, Overlap: 6/96
+    Adrenergic signaling in cardiomyocytes ***
+      adj.p: 3.74e-03, Overlap: 5/150
+    Chemical carcinogenesis ***
+      adj.p: 3.74e-03, Overlap: 6/239
+    Calcium signaling pathway ***
+      adj.p: 2.60e-02, Overlap: 5/240
+    Arrhythmogenic right ventricular cardiomyopathy ***
+      adj.p: 2.96e-02, Overlap: 3/77
+    Melanoma ***
+      adj.p: 2.96e-02, Overlap: 3/72
+    Metabolism of xenobiotics by cytochrome P450 ***
+      adj.p: 2.96e-02, Overlap: 3/76
+    Drug metabolism *
+      adj.p: 6.90e-02, Overlap: 3/108
+
+======================================================================
+Analysis: Reactome Pathways
+======================================================================
+  Total terms tested: 250
+  Significant (adj. p < 0.05): 18
+  Suggestive (adj. p < 0.25): 143
+
+  Top 10 Enriched Terms:
+  ------------------------------------------------------------
+    Striated Muscle Contraction R-HSA-390522 ***
+      adj.p: 3.78e-11, Overlap: 8/33
+    Muscle Contraction R-HSA-397014 ***
+      adj.p: 1.44e-07, Overlap: 10/196
+    Formation Of Cornified Envelope R-HSA-6809371 ***
+      adj.p: 4.79e-07, Overlap: 7/74
+    Keratinization R-HSA-6805567 ***
+      adj.p: 2.17e-06, Overlap: 9/208
+    Developmental Biology R-HSA-1266738 ***
+      adj.p: 1.20e-02, Overlap: 12/1073
+    FGFRL1 Modulation Of FGFR1 Signaling R-HSA-5658623 ***
+      adj.p: 3.61e-02, Overlap: 2/13
+    Phospholipase C-mediated Cascade: FGFR1 R-HSA-5... ***
+      adj.p: 4.14e-02, Overlap: 2/16
+    FGFR1 Ligand Binding And Activation R-HSA-190242 ***
+      adj.p: 4.14e-02, Overlap: 2/16
+    Activated Point Mutants Of FGFR2 R-HSA-2033519 ***
+      adj.p: 4.16e-02, Overlap: 2/17
+    Phospholipase C-mediated Cascade; FGFR2 R-HSA-5... ***
+      adj.p: 4.20e-02, Overlap: 2/18
+
+======================================================================
+Analysis: MSigDB Hallmark
+======================================================================
+  Total terms tested: 15
+  Significant (adj. p < 0.05): 3
+  Suggestive (adj. p < 0.25): 4
+
+  Top 10 Enriched Terms:
+  ------------------------------------------------------------
+    Myogenesis ***
+      adj.p: 5.67e-20, Overlap: 18/200
+    KRAS Signaling Dn ***
+      adj.p: 2.40e-02, Overlap: 4/200
+    Apical Junction ***
+      adj.p: 2.40e-02, Overlap: 4/200
+    Estrogen Response Late *
+      adj.p: 1.15e-01, Overlap: 3/200
+    Notch Signaling 
+      adj.p: 2.60e-01, Overlap: 1/32
+    Apoptosis 
+      adj.p: 2.60e-01, Overlap: 2/161
+    KRAS Signaling Up 
+      adj.p: 2.78e-01, Overlap: 2/200
+    Complement 
+      adj.p: 2.78e-01, Overlap: 2/200
+    Androgen Response 
+      adj.p: 4.82e-01, Overlap: 1/100
+    Fatty Acid Metabolism 
+      adj.p: 4.96e-01, Overlap: 1/158
+
+======================================================================
+Analysis: WikiPathways
+======================================================================
+  No results returned.
+
+======================================================================
+Analysis: ENCODE TF ChIP-seq
+======================================================================
+  Total terms tested: 625
+  Significant (adj. p < 0.05): 1
+  Suggestive (adj. p < 0.25): 1
+
+  Top 10 Enriched Terms:
+  ------------------------------------------------------------
+    TCF12 myocyte mm9 ***
+      adj.p: 3.00e-04, Overlap: 17/1223
+    MYOD1 myocyte mm9 
+      adj.p: 1.00e+00, Overlap: 18/3164
+    FOSL2 SK-N-SH hg19 
+      adj.p: 1.00e+00, Overlap: 5/469
+    MYOG myocyte mm9 
+      adj.p: 1.00e+00, Overlap: 18/3623
+    MYOD1 C2C12 mm9 
+      adj.p: 1.00e+00, Overlap: 7/1026
+    CEBPB HCT116 hg19 
+      adj.p: 1.00e+00, Overlap: 3/303
+    FOSL2 MCF-7 hg19 
+      adj.p: 1.00e+00, Overlap: 3/329
+    FOSL1 K562 hg19 
+      adj.p: 1.00e+00, Overlap: 3/849
+    SRF myocyte mm9 
+      adj.p: 1.00e+00, Overlap: 9/1668
+    TCF3 myocyte mm9 
+      adj.p: 1.00e+00, Overlap: 10/1987
+
+======================================================================
+Analysis: ChEA TF Targets
+======================================================================
+  No results returned.
+
+======================================================================
+Analysis: Human Gene Atlas
+======================================================================
+  Total terms tested: 31
+  Significant (adj. p < 0.05): 4
+  Suggestive (adj. p < 0.25): 5
+
+  Top 10 Enriched Terms:
+  ------------------------------------------------------------
+    SkeletalMuscle ***
+      adj.p: 4.63e-16, Overlap: 20/441
+    Heart ***
+      adj.p: 2.15e-07, Overlap: 12/415
+    Tongue ***
+      adj.p: 1.30e-06, Overlap: 7/115
+    Trachea ***
+      adj.p: 8.19e-04, Overlap: 4/72
+    Colorectaladenocarcinoma *
+      adj.p: 1.08e-01, Overlap: 4/292
+    Tonsil 
+      adj.p: 4.38e-01, Overlap: 1/26
+    Thyroid 
+      adj.p: 5.65e-01, Overlap: 3/388
+    Bonemarrow 
+      adj.p: 5.65e-01, Overlap: 1/52
+    Salivarygland 
+      adj.p: 5.65e-01, Overlap: 1/57
+    GlobusPallidus 
+      adj.p: 5.65e-01, Overlap: 1/59
+
+======================================================================
+Analysis: CellMarker
+======================================================================
+  Total terms tested: 131
+  Significant (adj. p < 0.05): 21
+  Suggestive (adj. p < 0.25): 87
+
+  Top 10 Enriched Terms:
+  ------------------------------------------------------------
+    Myocyte Undefined Human ***
+      adj.p: 1.11e-06, Overlap: 4/8
+    Contractile Smooth Muscle Cell Aorta Mouse ***
+      adj.p: 1.41e-05, Overlap: 4/16
+    Secretory Cell Trachea Mouse ***
+      adj.p: 1.03e-04, Overlap: 5/63
+    Secretory Cell Lung Human ***
+      adj.p: 2.53e-04, Overlap: 5/80
+    Secretory Cell Airway Epithelium Human ***
+      adj.p: 4.35e-04, Overlap: 3/15
+    Cardiomyocyte Heart Mouse ***
+      adj.p: 7.65e-04, Overlap: 3/19
+    Cardiomyocyte Embryo Human ***
+      adj.p: 2.12e-03, Overlap: 2/5
+    Granulocytic Neutrophil Blood Mouse ***
+      adj.p: 2.47e-03, Overlap: 2/6
+    Cardiomyocyte Heart Muscle Human ***
+      adj.p: 2.47e-03, Overlap: 2/6
+    Club Cell (Clara Cell) Lung Human ***
+      adj.p: 2.82e-03, Overlap: 2/7
+
+======================================================================
+Analysis: PanglaoDB
+======================================================================
+  Total terms tested: 71
+  Significant (adj. p < 0.05): 12
+  Suggestive (adj. p < 0.25): 19
+
+  Top 10 Enriched Terms:
+  ------------------------------------------------------------
+    Myocytes ***
+      adj.p: 1.53e-37, Overlap: 27/163
+    Cardiomyocytes ***
+      adj.p: 1.20e-27, Overlap: 22/174
+    Oxyphil Cells ***
+      adj.p: 7.33e-07, Overlap: 7/94
+    Clara Cells ***
+      adj.p: 1.97e-06, Overlap: 7/113
+    Ionocytes ***
+      adj.p: 2.42e-05, Overlap: 6/107
+    Myoblasts ***
+      adj.p: 5.22e-05, Overlap: 6/126
+    Airway Epithelial Cells ***
+      adj.p: 2.68e-04, Overlap: 5/103
+    Airway Goblet Cells ***
+      adj.p: 4.51e-04, Overlap: 5/118
+    Salivary Mucous Cells ***
+      adj.p: 3.56e-03, Overlap: 4/105
+    Pulmonary Alveolar Type II Cells ***
+      adj.p: 8.22e-03, Overlap: 4/135
+
+======================================================================
+Analysis: Cancer Cell Line Encyclopedia
+======================================================================
+  Total terms tested: 509
+  Significant (adj. p < 0.05): 27
+  Suggestive (adj. p < 0.25): 59
+
+  Top 10 Enriched Terms:
+  ------------------------------------------------------------
+    RD SOFT TISSUE ***
+      adj.p: 5.12e-18, Overlap: 18/211
+    RH41 SOFT TISSUE ***
+      adj.p: 2.39e-05, Overlap: 10/311
+    SNUC2A LARGE INTESTINE ***
+      adj.p: 5.16e-05, Overlap: 6/80
+    SNU1214 UPPER AERODIGESTIVE TRACT ***
+      adj.p: 1.94e-04, Overlap: 8/240
+    BICR16 UPPER AERODIGESTIVE TRACT ***
+      adj.p: 4.29e-04, Overlap: 6/125
+    SJRH30 SOFT TISSUE ***
+      adj.p: 9.56e-04, Overlap: 8/315
+    HARA LUNG ***
+      adj.p: 1.17e-03, Overlap: 5/93
+    SCC9 UPPER AERODIGESTIVE TRACT ***
+      adj.p: 1.34e-03, Overlap: 7/248
+    TE14 OESOPHAGUS ***
+      adj.p: 1.68e-03, Overlap: 5/110
+    TE6 OESOPHAGUS ***
+      adj.p: 1.68e-03, Overlap: 5/110
+
+======================================================================
+Analysis: OMIM Disease
+======================================================================
+  Total terms tested: 8
+  Significant (adj. p < 0.05): 5
+  Suggestive (adj. p < 0.25): 7
+
+  Top 10 Enriched Terms:
+  ------------------------------------------------------------
+    cardiomyopathy ***
+      adj.p: 1.00e-11, Overlap: 8/42
+    cardiomyopathy, dilated ***
+      adj.p: 6.09e-11, Overlap: 7/33
+    cardiomyopathy, hypertrophic ***
+      adj.p: 6.25e-09, Overlap: 5/17
+    myopathy ***
+      adj.p: 7.67e-07, Overlap: 5/44
+    muscular dystrophy ***
+      adj.p: 8.99e-03, Overlap: 2/33
+    ichthyosis *
+      adj.p: 7.50e-02, Overlap: 1/17
+    colorectal cancer *
+      adj.p: 1.46e-01, Overlap: 1/40
+    deafness 
+      adj.p: 3.16e-01, Overlap: 1/111
+
+======================================================================
+Analysis: DisGeNET
+======================================================================
+  No results returned.

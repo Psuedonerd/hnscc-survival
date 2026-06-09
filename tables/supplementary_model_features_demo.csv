@@ -1,0 +1,89 @@
+Feature_Number,Feature_Name,Feature_Type,Description
+1,Age,Clinical,Patient age at diagnosis (years)
+2,Pack_Years,Clinical,Cumulative tobacco exposure (pack-years)
+3,Gender_Male,Clinical,Male sex (vs female reference)
+4,Stage_II,Clinical,Tumor stage II (vs stage I reference)
+5,Stage_III,Clinical,Tumor stage III (vs stage I reference)
+6,Stage_IV,Clinical,Tumor stage IV (vs stage I reference)
+7,Stage_Unknown,Clinical,Tumor stage unknown (vs stage I reference)
+8,T_Stage_T2,Clinical,Primary tumor T2 (vs T0 reference)
+9,T_Stage_T3,Clinical,Primary tumor T3 (vs T0 reference)
+10,T_Stage_T4,Clinical,Primary tumor T4 (vs T0 reference)
+11,T_Stage_TX,Clinical,Primary tumor TX (vs T0 reference)
+12,N_Stage_N1,Clinical,Lymph-node stage N1 (vs N0 reference)
+13,N_Stage_N2,Clinical,Lymph-node stage N2 (vs N0 reference)
+14,N_Stage_N3,Clinical,Lymph-node stage N3 (vs N0 reference)
+15,N_Stage_NX,Clinical,Lymph-node stage NX (vs N0 reference)
+16,Grade_G2,Clinical,Moderately differentiated tumor grade (vs G1 reference)
+17,Grade_G3,Clinical,Poorly differentiated tumor grade (vs G1 reference)
+18,Grade_GX,Clinical,Unknown tumor grade (vs G1 reference)
+19,Alcohol_History_Unknown,Clinical,Alcohol history unknown (vs no reference)
+20,Alcohol_History_Yes,Clinical,History of alcohol consumption (vs no reference)
+21,RNA_AAA67,Transcriptomic,AAA67 gene expression
+22,RNA_AAA6,Transcriptomic,AAA6 gene expression
+23,RNA_AAA65,Transcriptomic,AAA65 gene expression
+24,RNA_AAA38,Transcriptomic,AAA38 gene expression
+25,RNA_AAA43,Transcriptomic,AAA43 gene expression
+26,RNA_AAA72,Transcriptomic,AAA72 gene expression
+27,RNA_AAA8,Transcriptomic,AAA8 gene expression
+28,RNA_AAA59,Transcriptomic,AAA59 gene expression
+29,RNA_AAA12,Transcriptomic,AAA12 gene expression
+30,RNA_AAA70,Transcriptomic,AAA70 gene expression
+31,RNA_AAA73,Transcriptomic,AAA73 gene expression
+32,RNA_AAA2,Transcriptomic,AAA2 gene expression
+33,RNA_AAA27,Transcriptomic,AAA27 gene expression
+34,RNA_AAA46,Transcriptomic,AAA46 gene expression
+35,RNA_AAA60,Transcriptomic,AAA60 gene expression
+36,RNA_AAA48,Transcriptomic,AAA48 gene expression
+37,RNA_AAA49,Transcriptomic,AAA49 gene expression
+38,RNA_AAA19,Transcriptomic,AAA19 gene expression
+39,RNA_AAA34,Transcriptomic,AAA34 gene expression
+40,RNA_AAA31,Transcriptomic,AAA31 gene expression
+41,RNA_AAA54,Transcriptomic,AAA54 gene expression
+42,RNA_AAA5,Transcriptomic,AAA5 gene expression
+43,RNA_AAA7,Transcriptomic,AAA7 gene expression
+44,RNA_AAA78,Transcriptomic,AAA78 gene expression
+45,RNA_AAA28,Transcriptomic,AAA28 gene expression
+46,RNA_AAA30,Transcriptomic,AAA30 gene expression
+47,RNA_AAA40,Transcriptomic,AAA40 gene expression
+48,RNA_AAA41,Transcriptomic,AAA41 gene expression
+49,RNA_AAA4,Transcriptomic,AAA4 gene expression
+50,RNA_AAA53,Transcriptomic,AAA53 gene expression
+51,RNA_AAA9,Transcriptomic,AAA9 gene expression
+52,RNA_AAA23,Transcriptomic,AAA23 gene expression
+53,RNA_AAA13,Transcriptomic,AAA13 gene expression
+54,RNA_AAA52,Transcriptomic,AAA52 gene expression
+55,RNA_AAA10,Transcriptomic,AAA10 gene expression
+56,RNA_AAA18,Transcriptomic,AAA18 gene expression
+57,RNA_AAA35,Transcriptomic,AAA35 gene expression
+58,RNA_AAA50,Transcriptomic,AAA50 gene expression
+59,RNA_AAA21,Transcriptomic,AAA21 gene expression
+60,RNA_AAA62,Transcriptomic,AAA62 gene expression
+61,RNA_AAA1,Transcriptomic,AAA1 gene expression
+62,RNA_AAA39,Transcriptomic,AAA39 gene expression
+63,RNA_AAA3,Transcriptomic,AAA3 gene expression
+64,RNA_AAA22,Transcriptomic,AAA22 gene expression
+65,RNA_AAA64,Transcriptomic,AAA64 gene expression
+66,RNA_AAA61,Transcriptomic,AAA61 gene expression
+67,RNA_AAA57,Transcriptomic,AAA57 gene expression
+68,RNA_AAA36,Transcriptomic,AAA36 gene expression
+69,RNA_AAA29,Transcriptomic,AAA29 gene expression
+70,RNA_AAA47,Transcriptomic,AAA47 gene expression
+71,RNA_AAA16,Transcriptomic,AAA16 gene expression
+72,RNA_AAA75,Transcriptomic,AAA75 gene expression
+73,RNA_AAA14,Transcriptomic,AAA14 gene expression
+74,RNA_AAA66,Transcriptomic,AAA66 gene expression
+75,RNA_AAA11,Transcriptomic,AAA11 gene expression
+76,RNA_AAA71,Transcriptomic,AAA71 gene expression
+77,RNA_AAA32,Transcriptomic,AAA32 gene expression
+78,RNA_AAA55,Transcriptomic,AAA55 gene expression
+79,RNA_AAA74,Transcriptomic,AAA74 gene expression
+80,RNA_AAA76,Transcriptomic,AAA76 gene expression
+81,CNV_AAA5,Copy Number,AAA5 copy-number alteration
+82,CNV_AAA1,Copy Number,AAA1 copy-number alteration
+83,CNV_AAA6,Copy Number,AAA6 copy-number alteration
+84,CNV_AAA7,Copy Number,AAA7 copy-number alteration
+85,CNV_AAA9,Copy Number,AAA9 copy-number alteration
+86,CNV_AAA3,Copy Number,AAA3 copy-number alteration
+87,CNV_AAA4,Copy Number,AAA4 copy-number alteration
+88,CNV_AAA2,Copy Number,AAA2 copy-number alteration
