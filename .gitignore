@@ -10,15 +10,6 @@ venv/
 .Rproj.user/
 *.html
 
-# Local data and generated outputs
-*.csv
-*.tsv
-CPTAC/data/
-data/
-outputs/
-results/
-figures/generated/
-
 # OS/editor files
 .DS_Store
 .vscode/
