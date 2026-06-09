@@ -7,7 +7,7 @@ preprocessing utilities as the main modeling workflow, prints the selected RSF
 hyperparameters, and reports train/test concordance for quick verification.
 
 Example:
-    python scripts/modeling/check_v7_params.py \
+    python scripts/training/check_v7_params.py \
         --train-data CPTAC/data/TCGA_Discovery_Harmonized_Full_Data.csv \
         --test-data CPTAC/data/CPTAC_Validation_Harmonized_Full_Data.csv
 """
